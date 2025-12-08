@@ -1,0 +1,26 @@
+# 文件管理系统 - 数据库配置
+# 支持 PostgreSQL 和 SQLite 两种数据库类型
+
+# 数据库类型：postgres 或 sqlite
+db_type = "postgres"
+
+# PostgreSQL 配置（当 db_type = "postgres" 时使用）
+[postgres]
+host = "localhost"
+port = 5432
+database = "file_manager"
+username = "postgres"
+password = "password123456"
+max_connections = 10
+connect_timeout = 30
+
+# SQLite 配置（当 db_type = "sqlite" 时使用）
+[sqlite]
+database = "file_manager"
+sqlite_path = "data/file_manager.db"
+max_connections = 10
+connect_timeout = 30
+
+# 开发环境配置（可选）
+#[development]
+# 可在此处覆盖开发环境的特定配置
