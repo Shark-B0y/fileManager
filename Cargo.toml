@@ -1,2 +1,0 @@
-[workspace]
-members = ["file-manager/src-tauri"]

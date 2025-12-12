@@ -185,24 +185,12 @@ FileManager/
 
 ### 构建命令
 ```bash
-# 安装Tauri CLI
-cargo install tauri-cli
 
-# 开发模式
-npm run tauri dev
+# 前置安装
+rustup target add wasm32-unknown-unknown
 
-# 构建应用（所有平台）
-npm run tauri build
-
-# 构建Windows应用
-npm run tauri build -- --target x86_64-pc-windows-msvc
-
-# 运行测试
-cargo test
-
-# 检查代码
-cargo check
-cargo clippy
+# 构建项目
+cargo tauri dev
 ```
 
 ## 📈 性能指标

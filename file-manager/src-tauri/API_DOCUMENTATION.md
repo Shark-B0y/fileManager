@@ -389,18 +389,33 @@ match db.init().await {
 - 添加 `GlobalDatabase` 单元测试
 - 更新API文档，添加模块导出说明和测试模块文档
 
-### v1.1.0 (2025-12-08)
+### v1.0.2 (2025-12-08)
 - 添加TOML配置文件支持：`config/database.toml`
 - 新增 `from_toml_file()` 方法从TOML文件加载配置
 - 修改主函数配置加载优先级：TOML文件 → 环境变量 → 默认配置
 - 创建配置文件模板 `config/database.toml`
 - 更新API文档，添加TOML配置说明
 
-### v1.2.0 (2025-12-08)
+### v1.0.3 (2025-12-08)
 - 重构测试代码：将所有测试代码移到独立的 `tests.rs` 模块
 - 移除 `config.rs` 和 `connection.rs` 中的 `#[cfg(test)]` 模块
 - 更新模块结构，添加 `#[cfg(test)] mod tests;` 声明
 - 保持测试覆盖率不变，提高代码组织性
+
+### v1.1.0 (2025-12-08)
+- 添加前端框架集成：创建 `commands.rs` 模块提供前后端通信接口
+- 添加数据库相关的命令：
+  - `init_database`: 初始化数据库连接
+  - `check_database_health`: 检查数据库健康状态
+  - `migrate_database`: 执行数据库迁移
+  - `close_database`: 关闭数据库连接
+  - `load_database_config`: 从配置文件加载配置
+  - `get_database_config`: 获取数据库配置信息
+- 更新 `main.rs` 为应用入口点
+- 创建应用配置文件 `app.conf.json`
+- 添加构建脚本 `build.rs`
+- 更新Cargo.toml依赖配置
+- 清理不需要的文件：删除 `icons/dummy.txt` 文件及目录，移除Cargo.toml中的图标配置
 
 ---
 
@@ -410,4 +425,4 @@ match db.init().await {
 - 删除方法时，标记为已弃用并说明替代方案
 - 定期检查文档与实际代码的一致性
 
-**最后更新：** 2025-12-08
+**最后更新：** 2025-12-08 (清理图标文件，更新版本记录)
