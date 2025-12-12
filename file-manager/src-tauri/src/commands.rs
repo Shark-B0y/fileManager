@@ -9,8 +9,9 @@ use crate::database::{DatabaseConfig, GlobalDatabase};
 use crate::database::config::DatabaseType;
 
 #[tauri::command]
-pub fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+pub async fn greet(name: &str) -> Result<(), String>{
+    println!("Hello, {}! You've been greeted from Rust!", name);
+    Ok(())
 }
 
 

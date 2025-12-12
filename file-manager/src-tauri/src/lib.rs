@@ -6,8 +6,12 @@ mod commands;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![commands::greet])
-        .setup(|app|{
+        .invoke_handler(tauri::generate_handler![
+            commands::greet
+        
+
+        ])
+        .setup(|_app|{
             // 初始化应用逻辑
             Ok(())
         })

@@ -254,6 +254,10 @@ cargo tauri dev
 
 ---
 
+# 开发者注
+  这是一个ai的练手项目, ai模型为deepseek-v3.2
+
+
 **版本**：v1.0.0
 **最后更新**：2025-12-05
 **作者**：FileManager Team
