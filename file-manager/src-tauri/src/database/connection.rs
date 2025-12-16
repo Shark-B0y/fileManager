@@ -254,5 +254,21 @@ impl GlobalDatabase {
     pub async fn close(&self) -> DatabaseResult<()> {
         self.manager.close().await
     }
+
+    /// 从默认配置初始化数据库（应用启动时调用）
+    pub async fn init_from_default_config() -> DatabaseResult<Self> {
+        let config = DatabaseConfig::default();
+        let db = Self::new(config);
+        db.init().await?;
+        Ok(db)
+    }
+
+    /// 从配置文件初始化数据库（应用启动时调用）
+    pub async fn init_from_config_file<P: AsRef<std::path::Path>>(config_path: P) -> DatabaseResult<Self> {
+        let config = DatabaseConfig::from_toml_file(config_path)?;
+        let db = Self::new(config);
+        db.init().await?;
+        Ok(db)
+    }
 }
 

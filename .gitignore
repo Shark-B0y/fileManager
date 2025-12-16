@@ -1,3 +1,5 @@
 /file-manager/src-tauri/target
 /file-manager/target
-/file-manager/dist
+/file-manager/node_modules
+/file-manager/package-lock.json
+/file-manager/src-tauri/Cargo.lock

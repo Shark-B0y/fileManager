@@ -70,5 +70,11 @@ impl From<serde_json::Error> for DatabaseError {
     }
 }
 
+impl From<String> for DatabaseError {
+    fn from(err: String) -> Self {
+        DatabaseError::Config(err)
+    }
+}
+
 /// 数据库结果类型别名
 pub type DatabaseResult<T> = Result<T, DatabaseError>;

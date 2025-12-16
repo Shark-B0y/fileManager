@@ -188,9 +188,10 @@ FileManager/
 
 # 前置安装
 rustup target add wasm32-unknown-unknown
+npm install
 
 # 构建项目
-cargo tauri dev
+npm run tauri dev
 ```
 
 ## 📈 性能指标

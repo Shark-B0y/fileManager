@@ -1,0 +1,17 @@
+{
+    "folders": [
+    {
+      "path": "."
+    },
+    {
+      "path": "./file-manager"
+    },
+    {
+      "path": "./file-manager/src-tauri"
+    }
+  ],
+    "settings": {
+    // 可选：指定 rust-analyzer 的工作区根目录为 src-tauri
+    "rust-analyzer.workspace.root": "./file-manager/src-tauri"
+  }
+}
