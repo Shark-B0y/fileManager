@@ -16,8 +16,8 @@
 
 ## 🏗️ 技术栈
 
-### 推荐方案：Rust + Tauri + PostgreSQL
-- **前端**：Tauri 2.0 + React/Vue/Svelte + TypeScript
+### 当前技术栈：Rust + Tauri + Vue 3 + PostgreSQL
+- **前端**：Tauri 2.0 + Vue 3 + TypeScript + Vite
 - **后端**：Rust + Tokio（异步运行时）
 - **数据库**：PostgreSQL 15+（主选）/ SQLite（备选）
 - **文件监控**：notify-rs（跨平台文件系统监控）
@@ -31,31 +31,35 @@
 e:\fileManager\
 ├── .claude/                    # Claude配置目录
 │   └── settings.local.json     # Claude权限设置
-├── file-manager/              # 主项目代码目录（Tauri项目）
+├── doc/                        # 项目文档目录（已迁移至此）
+│   ├── 产品需求文档.md         # 产品功能需求
+│   ├── 技术规范.md             # 编码规范和技术标准
+│   ├── 技术栈变更总结.md       # 技术栈变更分析
+│   ├── 技术栈方案.md           # 详细技术方案（47KB，核心文档）
+│   ├── 数据库设计详解.md       # 数据库设计文档
+│   ├── 项目开发计划.md         # 13周开发计划
+│   ├── 项目文档总览.md         # 文档索引
+│   └── 项目总结.md             # 项目概述
+├── file-manager/              # 主项目代码目录（Tauri + Vue项目）
 ├── README.md                  # 项目总览文档（安装、使用、架构）
-├── 产品需求文档.md            # 产品功能需求
-├── 技术规范.md                # 编码规范和技术标准
-├── 技术栈变更总结.md          # 技术栈变更分析
-├── 技术栈方案.md              # 详细技术方案（47KB，核心文档）
-├── 数据库设计详解.md          # 数据库设计文档
-├── 项目开发计划.md            # 13周开发计划
-├── 项目文档总览.md            # 文档索引
-├── 项目总结.md                # 项目概述
 └── API文档.md                # 前后端通信api文档
 ```
 
-### 主项目目录结构（file-manager/）：
+### 主项目目录结构（file-manager/ - Tauri + Vue 3）：
 ```
 file-manager/
 ├── public/                    # 静态资源
-├── src/                       # 前端源代码
-│   ├── components/           # 组件目录（file/, layout/, tag/, ui/）
-│   ├── pages/               # 页面组件
-│   ├── services/            # 服务层
-│   ├── stores/              # 状态管理
-│   ├── styles/              # 样式文件
-│   ├── types/               # TypeScript类型定义
-│   └── utils/               # 工具函数
+├── src/                       # Vue 3前端源代码
+│   ├── assets/               # 静态资源（图片、图标等）
+│   ├── components/           # Vue组件目录（待按功能模块组织）
+│   ├── pages/               # 页面组件（待实现）
+│   ├── services/            # 服务层（待实现）
+│   ├── stores/              # 状态管理（待实现）
+│   ├── styles/              # 样式文件（待实现）
+│   ├── types/               # TypeScript类型定义（待实现）
+│   ├── utils/               # 工具函数（待实现）
+│   ├── App.vue              # 主应用组件
+│   └── main.js              # 应用入口文件
 ├── src-tauri/                # Rust后端代码
 │   ├── migrations/          # 数据库迁移
 │   └── src/                 # Rust源代码
@@ -64,7 +68,9 @@ file-manager/
 │       ├── services/        # 业务服务层
 │       ├── system/          # 系统集成层
 │       └── utils/           # 工具函数
-└── tests/                    # 测试目录
+├── package.json              # Vue项目依赖配置
+├── vite.config.js            # Vite构建配置
+└── tests/                    # 测试目录（待实现）
 ```
 
 ## 📊 核心数据模型
@@ -89,15 +95,22 @@ file-manager/
 4. **file_changes表**：文件变更历史
 ---
 
-**项目状态**：规划设计阶段完成 ✅
-**下一步**：进入开发实施阶段 🚀
+**项目状态**：开发实施阶段进行中 🚧
+- ✅ 规划设计阶段完成
+- ✅ 文档体系整理完成（已迁移至doc目录）
+- ✅ 技术栈确定：Tauri + Vue 3 + Rust
+- 🔄 前端框架迁移至Vue 3完成
+- 📋 待实现：核心功能开发
+
+**当前进展**：前端已从React迁移至Vue 3，文档已统一整理至doc目录，准备开始核心功能开发。
 
 ## 📝 Claude搜索规则
 
 ### 文档搜索规则
-1. **优先搜索文档**：当需要了解项目信息时，优先搜索项目根目录下的`.md`文档文件
+1. **优先搜索文档**：当需要了解项目信息时，优先搜索`doc/`目录下的`.md`文档文件
 2. **避免重复提问**：在提问前先查阅相关文档，确保问题在文档中无明确答案
 3. **上下文保持**：在对话中引用文档内容时，需注明文档名称和章节
+4. **文档位置**：所有项目文档已统一迁移至`doc/`目录，根目录仅保留README.md、CLAUDE.md和API文档.md
 
 ### 目录排除规则
 1. **禁止搜索目录**：任何时候都不要查询`file-manager/src-tauri/target`目录下的所有内容

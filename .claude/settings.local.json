@@ -5,7 +5,8 @@
       "Bash(mkdir:*)",
       "Bash(cat:*)",
       "Bash(cargo check:*)",
-      "Bash(cargo test:*)"
+      "Bash(cargo test:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []
