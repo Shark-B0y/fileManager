@@ -1,0 +1,30 @@
+# Tokio 运行时配置
+# 用于配置 Tokio 运行时的参数
+
+# 运行时类型：multi_thread（多线程，推荐）或 current_thread（单线程）
+runtime_type = "multi_thread"
+
+# 工作线程数量（仅多线程运行时有效）
+# 如果未设置，则使用默认值（CPU 核心数）
+# worker_threads = 4
+
+# 线程名称前缀
+thread_name_prefix = "tokio-worker"
+
+# 线程栈大小（字节）
+# 如果未设置，则使用默认值
+# thread_stack_size = 2097152  # 2MB
+
+# 是否启用 I/O 驱动（默认：true）
+enable_io = true
+
+# 是否启用时间驱动（默认：true）
+enable_time = true
+
+# 是否启用信号处理（默认：false，仅在 Unix 系统上有效）
+enable_signal = false
+
+# 全局并发限制（阻塞线程的最大数量）
+# 如果未设置，则使用默认值
+# global_concurrency_limit = 512
+

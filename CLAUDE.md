@@ -62,11 +62,14 @@ file-manager/
 │   └── main.js              # 应用入口文件
 ├── src-tauri/                # Rust后端代码
 │   ├── migrations/          # 数据库迁移
+│   ├── config/              # 配置文件目录
+│   │   └── database.toml    # 数据库配置文件
 │   └── src/                 # Rust源代码
 │       ├── database/        # 数据库访问层
 │       ├── models/          # 数据模型
 │       ├── services/        # 业务服务层
 │       ├── system/          # 系统集成层
+│       ├── lib.rs           # 库入口（Tauri应用启动）
 │       └── utils/           # 工具函数
 ├── package.json              # Vue项目依赖配置
 ├── vite.config.js            # Vite构建配置
@@ -99,10 +102,17 @@ file-manager/
 - ✅ 规划设计阶段完成
 - ✅ 文档体系整理完成（已迁移至doc目录）
 - ✅ 技术栈确定：Tauri + Vue 3 + Rust
-- 🔄 前端框架迁移至Vue 3完成
+- ✅ 前端框架迁移至Vue 3完成
+- ✅ 数据库模块实现完成
+- ✅ 数据库初始化功能完成（应用启动时自动初始化）
 - 📋 待实现：核心功能开发
 
-**当前进展**：前端已从React迁移至Vue 3，文档已统一整理至doc目录，准备开始核心功能开发。
+**当前进展**：
+- 前端已从React迁移至Vue 3
+- 文档已统一整理至doc目录
+- 数据库模块已完成，支持PostgreSQL和SQLite
+- 系统初始化模块已完成，应用启动时自动初始化数据库并执行迁移
+- 准备开始核心功能开发
 
 ## 📝 Claude搜索规则
 

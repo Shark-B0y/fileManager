@@ -246,30 +246,116 @@ database/
 - `processed_at` - 处理时间
 - `status` - 处理状态（pending/processed/failed）
 
+## 系统初始化模块 (system/init.rs)
+
+### 概述
+
+系统初始化模块负责应用启动时的系统级初始化操作，包括数据库初始化。该模块封装了数据库初始化的完整流程，包括配置加载、连接建立和迁移执行。
+
+### 方法列表
+
+#### `init_database<P: AsRef<Path>>(config_path: P) -> DatabaseResult<GlobalDatabase>`
+
+初始化数据库，优先从配置文件加载配置，失败则使用默认配置。
+
+**参数：**
+- `config_path`: 配置文件路径，默认为 `"config/database.toml"`
+
+**返回值：**
+- `Ok(GlobalDatabase)`: 初始化成功并完成迁移的数据库实例
+- `Err(DatabaseError)`: 初始化失败的错误信息
+
+**功能：**
+1. 检查配置文件是否存在
+2. 如果存在，尝试从配置文件初始化
+3. 如果配置文件不存在或初始化失败，使用默认配置
+4. 自动执行数据库迁移
+
+**使用示例：**
+```rust
+use crate::system::init::init_database;
+
+// 在应用启动时调用
+let db = init_database("config/database.toml").await?;
+```
+
+#### `init_database_with_default() -> DatabaseResult<GlobalDatabase>`
+
+使用默认配置初始化数据库。
+
+**返回值：**
+- `Ok(GlobalDatabase)`: 初始化成功并完成迁移的数据库实例
+- `Err(DatabaseError)`: 初始化失败的错误信息
+
+**功能：**
+1. 使用默认配置创建数据库实例
+2. 初始化数据库连接
+3. 自动执行数据库迁移
+
+**使用示例：**
+```rust
+use crate::system::init::init_database_with_default;
+
+let db = init_database_with_default().await?;
+```
+
 ## 使用示例
 
-### 初始化数据库
+### 应用启动时自动初始化（推荐）
+
+应用在启动时会自动调用 `init_database` 进行数据库初始化，无需手动调用：
+
+```rust
+// lib.rs 中的实现
+.setup(|app| {
+    let app_handle = app.handle();
+    let db_result = tokio::runtime::Runtime::new()
+        .expect("创建Tokio运行时失败")
+        .block_on(async {
+            init_database("config/database.toml").await
+        });
+
+    match db_result {
+        Ok(db) => {
+            app_handle.manage(db);
+            println!("数据库初始化成功");
+        }
+        Err(e) => {
+            eprintln!("数据库初始化失败: {}", e);
+        }
+    }
+    Ok(())
+})
+```
+
+### 手动初始化数据库
+
+如果需要手动初始化数据库，可以使用以下方式：
 
 ```rust
 use crate::database::{DatabaseConfig, GlobalDatabase};
 
 // 方法1：使用默认配置
 let config = DatabaseConfig::default();
+let db = GlobalDatabase::new(config);
+db.init().await?;
+db.migrate().await?;
 
 // 方法2：从环境变量加载
 let config = DatabaseConfig::from_env().unwrap_or_default();
+let db = GlobalDatabase::new(config);
+db.init().await?;
+db.migrate().await?;
 
 // 方法3：从TOML配置文件加载（推荐）
 let config = DatabaseConfig::from_toml_file("config/database.toml").unwrap_or_default();
-
-// 创建数据库管理器
 let db = GlobalDatabase::new(config);
-
-// 初始化连接
 db.init().await?;
-
-// 执行迁移
 db.migrate().await?;
+
+// 方法4：使用系统初始化模块（推荐，自动执行迁移）
+use crate::system::init::init_database;
+let db = init_database("config/database.toml").await?;
 ```
 
 ### 执行查询

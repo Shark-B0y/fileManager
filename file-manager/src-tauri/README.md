@@ -19,16 +19,22 @@
 ```
 src-tauri/
 ├── src/
-│   ├── database/
+│   ├── database/          # 数据库访问层
 │   │   ├── mod.rs          # 模块导出
 │   │   ├── config.rs       # 数据库配置
 │   │   ├── connection.rs   # 数据库连接管理
 │   │   └── error.rs        # 错误处理
+│   ├── system/            # 系统集成层
+│   │   ├── mod.rs          # 模块导出
+│   │   └── init.rs         # 系统初始化（数据库初始化）
+│   ├── lib.rs             # 库入口（Tauri应用启动）
 │   └── main.rs            # 主程序入口
 ├── migrations/            # 数据库迁移文件
 │   ├── 0001_initial_schema.sql
 │   ├── 0002_add_search_indexes.sql
 │   └── 0003_sqlite_support.sql
+├── config/                # 配置文件目录
+│   └── database.toml      # 数据库配置文件
 ├── Cargo.toml            # 依赖配置
 └── README.md             # 本文档
 ```
@@ -118,21 +124,38 @@ cargo run
 
 ## API使用示例
 
-### 初始化数据库
+### 应用启动时自动初始化数据库
+
+应用启动时会自动初始化数据库，优先从配置文件 `config/database.toml` 加载配置，如果配置文件不存在或加载失败，则使用默认配置。
+
+初始化逻辑位于 `system/init.rs` 模块中：
+
+```rust
+use crate::system::init::init_database;
+
+// 在应用启动时调用（lib.rs 中已实现）
+let db = init_database("config/database.toml").await?;
+```
+
+### 手动初始化数据库
+
+如果需要手动初始化数据库，可以使用以下方式：
 
 ```rust
 use crate::database::{DatabaseConfig, GlobalDatabase};
 
-// 加载配置
+// 方式1：从配置文件初始化
+let db = GlobalDatabase::init_from_config_file("config/database.toml").await?;
+db.migrate().await?;
+
+// 方式2：使用默认配置初始化
+let db = GlobalDatabase::init_from_default_config().await?;
+db.migrate().await?;
+
+// 方式3：自定义配置
 let config = DatabaseConfig::from_env().unwrap_or_default();
-
-// 创建数据库管理器
 let db = GlobalDatabase::new(config);
-
-// 初始化连接
 db.init().await?;
-
-// 执行迁移
 db.migrate().await?;
 ```
 
