@@ -1,10 +1,14 @@
 -- 添加搜索索引
 -- 优化搜索性能
 
+-- 创建 pg_trgm 扩展（用于 trigram 索引，支持模糊搜索）
+-- 如果扩展已存在，则忽略错误
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 -- 为files表的fingerprint_data添加GIN索引，支持JSON查询
 CREATE INDEX IF NOT EXISTS idx_files_fingerprint_data_gin ON files USING GIN (fingerprint_data);
 
--- 为tags表添加全文搜索索引
+-- 为tags表添加全文搜索索引（使用 trigram）
 CREATE INDEX IF NOT EXISTS idx_tags_name_trgm ON tags USING GIN (name gin_trgm_ops);
 
 -- 为files表的current_path添加trigram索引，支持模糊路径搜索
