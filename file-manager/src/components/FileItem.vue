@@ -1,7 +1,7 @@
 <template>
   <div
     class="file-item"
-    :class="{ 'is-folder': item.type === 'folder' }"
+    :class="{ 'is-folder': item.file_type === 'folder' }"
     @click="handleClick"
     @dblclick="handleDoubleClick"
   >
@@ -40,14 +40,14 @@ const iconChar = computed(() => {
 });
 
 const formattedSize = computed(() => {
-  if (props.item.type === 'folder') {
+  if (props.item.file_type === 'folder') {
     return '-';
   }
   return formatFileSize(props.item.size);
 });
 
 const formattedDate = computed(() => {
-  return formatDate(props.item.modifiedDate);
+  return formatDate(props.item.modified_date);
 });
 
 const typeName = computed(() => {

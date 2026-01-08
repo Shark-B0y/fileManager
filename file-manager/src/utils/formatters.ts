@@ -76,8 +76,8 @@ export function formatDate(dateString: string): string {
  * @param item 文件项
  * @returns 类型名称
  */
-export function getFileTypeName(item: { type: 'file' | 'folder'; extension?: string }): string {
-  if (item.type === 'folder') {
+export function getFileTypeName(item: { file_type: 'file' | 'folder'; extension?: string }): string {
+  if (item.file_type === 'folder') {
     return '文件夹';
   }
 

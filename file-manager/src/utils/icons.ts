@@ -5,8 +5,8 @@
  * @param item 文件项
  * @returns 图标标识
  */
-export function getFileIcon(item: { type: 'file' | 'folder'; extension?: string }): string {
-  if (item.type === 'folder') {
+export function getFileIcon(item: { file_type: 'file' | 'folder'; extension?: string }): string {
+  if (item.file_type === 'folder') {
     return 'folder';
   }
 
