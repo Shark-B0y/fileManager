@@ -59,7 +59,7 @@ const canGoUp = computed(() => {
 
 // 处理文件项点击
 function handleItemClick(item: FileItem) {
-  if (item.type === 'folder') {
+  if (item.file_type === 'folder') {
     enterDirectory(item.path);
   } else {
     // 文件点击处理（后续实现）

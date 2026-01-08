@@ -12,7 +12,7 @@ pub struct FileItem {
     /// 完整路径
     pub path: String,
     /// 文件类型："file" 或 "folder"
-    pub r#type: String,
+    pub file_type: String,
     /// 文件大小（字节）
     pub size: u64,
     /// 修改日期（ISO 8601 格式）

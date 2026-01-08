@@ -86,7 +86,7 @@ impl FileSystemService {
                 id: file_path.to_string_lossy().to_string(),
                 name: file_name,
                 path: file_path.to_string_lossy().to_string(),
-                r#type: file_type.to_string(),
+                file_type: file_type.to_string(),
                 size: metadata.len(),
                 modified_date,
                 created_date,
@@ -99,7 +99,7 @@ impl FileSystemService {
 
         // 排序：文件夹在前，然后按名称排序
         items.sort_by(|a, b| {
-            match (a.r#type.as_str(), b.r#type.as_str()) {
+            match (a.file_type.as_str(), b.file_type.as_str()) {
                 ("folder", "file") => std::cmp::Ordering::Less,
                 ("file", "folder") => std::cmp::Ordering::Greater,
                 _ => a.name.cmp(&b.name),

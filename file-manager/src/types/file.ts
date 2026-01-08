@@ -11,17 +11,17 @@ export interface FileItem {
   /** 完整路径 */
   path: string;
   /** 文件类型 */
-  type: 'file' | 'folder';
+  file_type: 'file' | 'folder';
   /** 文件大小（字节） */
   size: number;
   /** 修改日期 */
-  modifiedDate: string; // ISO 8601 格式
+  modified_date: string; // ISO 8601 格式
   /** 创建日期 */
-  createdDate: string; // ISO 8601 格式
+  created_date: string; // ISO 8601 格式
   /** 文件扩展名（仅文件） */
   extension?: string;
   /** 是否为隐藏文件 */
-  isHidden?: boolean;
+  is_hidden?: boolean;
 }
 
 /**
@@ -31,13 +31,13 @@ export interface DirectoryInfo {
   /** 当前路径 */
   path: string;
   /** 父路径 */
-  parentPath?: string;
+  parent_path?: string;
   /** 文件列表 */
   items: FileItem[];
   /** 总文件数 */
-  totalFiles: number;
+  total_files: number;
   /** 总文件夹数 */
-  totalFolders: number;
+  total_folders: number;
 }
 
 /**
