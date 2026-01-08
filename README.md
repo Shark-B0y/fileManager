@@ -184,8 +184,15 @@ FileManager/
 ```
 
 ### 构建命令
-```bash
+rust语言官网
+https://rust-lang.org/
 
+node.js
+https://nodejs.org/
+
+cursor
+https://cursor.com/
+```bash
 # 前置安装
 rustup target add wasm32-unknown-unknown
 npm install
@@ -256,7 +263,8 @@ npm run tauri dev
 ---
 
 # 开发者注
-  这是一个ai的练手项目, ai模型为deepseek-v3.2
+  这是一个ai的练手项目, ai模型为
+  deepseek-v3.2 -> Composer1
 
 
 **版本**：v1.0.0

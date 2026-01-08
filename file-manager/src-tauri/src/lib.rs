@@ -1,5 +1,7 @@
 mod database;
 mod commands;
+mod models;
+mod services;
 mod system;
 
 use tauri::Manager;
@@ -35,7 +37,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::greet
+            commands::greet,
+            commands::list_directory,
+            commands::get_home_directory
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

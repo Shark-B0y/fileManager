@@ -1,0 +1,111 @@
+// 格式化工具函数
+
+/**
+ * 格式化文件大小
+ * @param bytes 字节数
+ * @returns 格式化后的字符串
+ */
+export function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B';
+
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
+/**
+ * 格式化日期时间
+ * @param dateString 时间字符串（可能是 ISO 8601 或 Unix 时间戳格式）
+ * @returns 格式化后的日期字符串
+ */
+export function formatDate(dateString: string): string {
+  let date: Date;
+
+  // 尝试解析不同的时间格式
+  // 格式可能是: "1234567890.123456789Z" (Unix 时间戳 + 纳秒)
+  if (dateString.includes('.')) {
+    const parts = dateString.split('.');
+    const seconds = parseInt(parts[0], 10);
+    date = new Date(seconds * 1000);
+  } else {
+    // 尝试直接解析
+    date = new Date(dateString);
+  }
+
+  // 检查日期是否有效
+  if (isNaN(date.getTime())) {
+    return dateString; // 如果无法解析，返回原始字符串
+  }
+
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+  // 如果是今天，显示时间
+  if (days === 0) {
+    return date.toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  // 如果是今年，显示月日和时间
+  if (date.getFullYear() === now.getFullYear()) {
+    return date.toLocaleDateString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  // 其他情况显示完整日期
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+/**
+ * 获取文件类型显示名称
+ * @param item 文件项
+ * @returns 类型名称
+ */
+export function getFileTypeName(item: { type: 'file' | 'folder'; extension?: string }): string {
+  if (item.type === 'folder') {
+    return '文件夹';
+  }
+
+  if (!item.extension) {
+    return '文件';
+  }
+
+  const ext = item.extension.toLowerCase();
+  const typeMap: Record<string, string> = {
+    'txt': '文本文档',
+    'doc': 'Word 文档',
+    'docx': 'Word 文档',
+    'xls': 'Excel 表格',
+    'xlsx': 'Excel 表格',
+    'ppt': 'PowerPoint 演示文稿',
+    'pptx': 'PowerPoint 演示文稿',
+    'pdf': 'PDF 文档',
+    'jpg': 'JPEG 图像',
+    'jpeg': 'JPEG 图像',
+    'png': 'PNG 图像',
+    'gif': 'GIF 图像',
+    'mp4': 'MP4 视频',
+    'avi': 'AVI 视频',
+    'mp3': 'MP3 音频',
+    'zip': 'ZIP 压缩文件',
+    'rar': 'RAR 压缩文件',
+  };
+
+  return typeMap[ext] || `${ext.toUpperCase()} 文件`;
+}
+
