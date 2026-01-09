@@ -59,6 +59,13 @@
         @focus="handlePathInputFocus"
       />
     </div>
+
+    <!-- 错误提示消息 -->
+    <transition name="error-fade">
+      <div v-if="errorMessage" class="error-message">
+        {{ errorMessage }}
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -92,6 +99,10 @@ const {
 const pathInputRef = ref<HTMLInputElement | null>(null);
 const pathInputValue = ref<string>('');
 const isPathInputFocused = ref(false);
+
+// 错误提示消息
+const errorMessage = ref<string>('');
+let errorTimer: number | null = null;
 
 // 显示路径（如果是驱动盘列表，显示中文；否则显示实际路径）
 const displayPath = computed(() => {
@@ -240,16 +251,16 @@ async function handlePathInput() {
       pathInputValue.value = '';
       pathInputRef.value?.blur();
     } else {
-      // 路径不存在，弹出提示框
-      alert(`路径不存在: ${inputPath}`);
+      // 路径不存在，显示错误提示
+      showErrorMessage(`路径不存在: ${inputPath}`);
       // 清空输入框，失去焦点后会自动恢复为当前路径（占位符）
       pathInputValue.value = '';
       pathInputRef.value?.blur();
     }
   } catch (error) {
-    // 发生错误，弹出提示框
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    alert(`无法访问路径: ${errorMessage}`);
+    // 发生错误，显示错误提示
+    const message = error instanceof Error ? error.message : String(error);
+    showErrorMessage(`无法访问路径: ${message}`);
     // 清空输入框
     pathInputValue.value = '';
     pathInputRef.value?.blur();
@@ -258,6 +269,23 @@ async function handlePathInput() {
 
 // 标记是否正在执行导航操作（返回/前进/向上），避免重复记录历史
 let isNavigating = false;
+
+// 显示错误消息（2秒后自动淡出）
+function showErrorMessage(message: string) {
+  // 清除之前的定时器
+  if (errorTimer !== null) {
+    clearTimeout(errorTimer);
+  }
+
+  // 显示错误消息
+  errorMessage.value = message;
+
+  // 2秒后开始淡出（淡出动画持续0.3秒）
+  errorTimer = window.setTimeout(() => {
+    errorMessage.value = '';
+    errorTimer = null;
+  }, 2000);
+}
 
 // 监听路径变化，更新导航历史和输入框显示
 // 只有当路径不是通过导航按钮改变时（如点击文件夹），才更新导航历史
@@ -324,11 +352,16 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown);
+  // 清理错误提示定时器
+  if (errorTimer !== null) {
+    clearTimeout(errorTimer);
+  }
 });
 </script>
 
 <style scoped>
 .navigation-bar {
+  position: relative;
   display: flex;
   align-items: center;
   height: 40px;
@@ -416,6 +449,44 @@ onUnmounted(() => {
 
 .path-input:focus {
   outline: none;
+}
+
+/* 错误提示消息样式 */
+.error-message {
+  position: absolute;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #f44336;
+  color: #ffffff;
+  padding: 12px 24px;
+  border-radius: 4px;
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  white-space: nowrap;
+  max-width: 80%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 淡入淡出动画 */
+.error-fade-enter-active {
+  transition: opacity 0.3s ease-in;
+}
+
+.error-fade-leave-active {
+  transition: opacity 0.3s ease-out;
+}
+
+.error-fade-enter-from,
+.error-fade-leave-to {
+  opacity: 0;
+}
+
+.error-fade-enter-to,
+.error-fade-leave-from {
+  opacity: 1;
 }
 </style>
 
