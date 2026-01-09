@@ -53,7 +53,33 @@ export function useFileSystem() {
    */
   async function goUp() {
     if (directoryInfo.value?.parent_path) {
-      await loadDirectory(directoryInfo.value.parent_path);
+      const parentPath = directoryInfo.value.parent_path;
+      // 如果父路径是 "drives:"，则加载驱动盘列表
+      if (parentPath === 'drives:') {
+        await loadDrives();
+      } else {
+        await loadDirectory(parentPath);
+      }
+    }
+  }
+
+  /**
+   * 加载驱动盘列表
+   */
+  async function loadDrives() {
+    loading.value = true;
+    error.value = null;
+
+    try {
+      const result = await invoke<DirectoryInfo>('list_drives');
+      directoryInfo.value = result;
+      currentPath.value = '驱动盘';
+      return result;
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : String(err);
+      throw err;
+    } finally {
+      loading.value = false;
     }
   }
 
@@ -81,6 +107,7 @@ export function useFileSystem() {
     enterDirectory,
     goUp,
     initialize,
+    loadDrives,
   };
 }
 

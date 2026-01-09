@@ -25,8 +25,9 @@
 - [文件系统接口](#文件系统接口)
   - [1. list_directory - 获取目录内容](#1-list_directory---获取目录内容)
   - [2. get_home_directory - 获取用户主目录](#2-get_home_directory---获取用户主目录)
+  - [3. list_drives - 获取驱动盘列表](#3-list_drives---获取驱动盘列表)
 - [示例命令](#示例命令)
-  - [3. greet - 问候命令](#3-greet---问候命令)
+  - [4. greet - 问候命令](#4-greet---问候命令)
 - [数据结构定义](#数据结构定义)
   - [FileItem - 文件项](#fileitem---文件项)
   - [DirectoryInfo - 目录信息](#directoryinfo---目录信息)
@@ -233,9 +234,135 @@ pub async fn get_home_directory() -> Result<String, String> {
 
 ---
 
+### 3. list_drives - 获取驱动盘列表
+
+**功能描述**：获取 Windows 系统中所有可用的驱动盘列表（仅 Windows 系统支持）。用于在文件管理器中显示所有驱动盘（如 C:、D:、E: 等），方便用户在不同驱动盘之间切换。
+
+**接口名称**：`list_drives`
+
+**调用方式**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+const result = await invoke<DirectoryInfo>('list_drives');
+```
+
+#### 请求参数
+
+**Rust 后端**：
+```rust
+#[tauri::command]
+pub async fn list_drives() -> Result<DirectoryInfo, String>
+```
+
+**参数说明**：无参数
+
+**TypeScript 前端**：无需传递参数
+
+#### 返回数据
+
+**成功返回**：`DirectoryInfo` 对象
+
+**返回数据结构说明**：
+- `path`: 固定为 `"drives:"`（用于标识这是驱动盘列表视图）
+- `parent_path`: `None`（驱动盘列表是最顶层，无父路径）
+- `items`: 所有可用驱动盘的列表，每个驱动盘是一个 `FileItem`，其中：
+  - `id`: 驱动盘路径（如 `"C:\\"`）
+  - `name`: 驱动盘名称（如 `"C:"`）
+  - `path`: 驱动盘完整路径（如 `"C:\\"`）
+  - `file_type`: 固定为 `"folder"`
+  - `size`: 固定为 `0`（驱动盘不显示大小）
+- `total_files`: 固定为 `0`
+- `total_folders`: 可用驱动盘的数量
+
+**错误返回**：`String` 错误信息
+
+**常见错误**：
+- `"此功能仅支持 Windows 系统"` - 在非 Windows 系统上调用此接口
+- 其他系统错误（如无法读取驱动盘信息）
+
+#### 数据结构
+
+**Rust 后端** (`src-tauri/src/models/file_system.rs`)：
+使用 `DirectoryInfo` 结构体，详见 [DirectoryInfo - 目录信息](#directoryinfo---目录信息)
+
+**TypeScript 前端** (`src/types/file.ts`)：
+使用 `DirectoryInfo` 接口，详见 [DirectoryInfo - 目录信息](#directoryinfo---目录信息)
+
+#### 特殊说明
+
+1. **平台限制**：此接口仅在 Windows 系统上可用，非 Windows 系统会返回错误
+2. **驱动盘检测**：系统会遍历 A-Z 所有可能的驱动盘，只返回实际存在的驱动盘
+3. **排序规则**：返回的驱动盘列表按字母顺序排序（A-Z）
+4. **路径格式**：返回的驱动盘路径使用标准 Windows 格式（如 `"C:\\"`），可直接用于 `list_directory` 接口
+
+#### 使用示例
+
+**前端调用**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+import type { DirectoryInfo } from '../types/file';
+
+async function loadDrives(): Promise<DirectoryInfo> {
+  try {
+    const result = await invoke<DirectoryInfo>('list_drives');
+    console.log('驱动盘列表:', result);
+    return result;
+  } catch (error) {
+    console.error('加载驱动盘列表失败:', error);
+    throw error;
+  }
+}
+
+// 使用示例
+const drivesInfo = await loadDrives();
+console.log(`共有 ${drivesInfo.total_folders} 个驱动盘`);
+drivesInfo.items.forEach(drive => {
+  console.log(`- ${drive.name} (${drive.path})`);
+  // 点击驱动盘后，可以调用 list_directory(drive.path) 进入该驱动盘
+});
+```
+
+**后端实现** (`src-tauri/src/commands.rs`)：
+```rust
+#[tauri::command]
+pub async fn list_drives() -> Result<DirectoryInfo, String> {
+    FileSystemService::list_drives()
+}
+```
+
+**前端集成示例** (`src/composables/useFileSystem.ts`)：
+```typescript
+async function loadDrives() {
+  loading.value = true;
+  error.value = null;
+
+  try {
+    const result = await invoke<DirectoryInfo>('list_drives');
+    directoryInfo.value = result;
+    currentPath.value = '驱动盘';
+    return result;
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+    throw err;
+  } finally {
+    loading.value = false;
+  }
+}
+```
+
+#### 与 list_directory 的配合使用
+
+当用户在驱动盘根目录（如 `C:\`）点击返回按钮时：
+1. `list_directory` 返回的 `parent_path` 为 `"drives:"`
+2. 前端检测到 `parent_path === "drives:"` 时，调用 `list_drives()` 显示驱动盘列表
+3. 用户点击某个驱动盘后，调用 `list_directory(drive.path)` 进入该驱动盘的根目录
+
+---
+
 ## 示例命令
 
-### 3. greet - 问候命令
+### 4. greet - 问候命令
 
 **功能描述**：示例命令，用于测试前后端通信是否正常。
 
@@ -430,18 +557,22 @@ export interface DirectoryInfo {
 
 | 字段名 | Rust 类型 | TypeScript 类型 | 必填 | 说明 |
 |--------|-----------|-----------------|------|------|
-| `path` | `String` | `string` | 是 | 当前目录的完整路径 |
-| `parent_path` | `Option<String>` | `string \| undefined` | 否 | 父目录路径，根目录（如 `C:\`）为 `None` |
-| `items` | `Vec<FileItem>` | `FileItem[]` | 是 | 目录下的文件和文件夹列表，已排序（文件夹在前，然后按名称排序） |
-| `total_files` | `usize` | `number` | 是 | 目录中的文件总数（不包括文件夹） |
-| `total_folders` | `usize` | `number` | 是 | 目录中的文件夹总数 |
+| `path` | `String` | `string` | 是 | 当前目录的完整路径。特殊值：当调用 `list_drives()` 时，此字段为 `"drives:"` |
+| `parent_path` | `Option<String>` | `string \| undefined` | 否 | 父目录路径。驱动盘根目录（如 `C:\`）的 `parent_path` 为 `"drives:"`（用于返回驱动盘列表）；驱动盘列表的 `parent_path` 为 `None` |
+| `items` | `Vec<FileItem>` | `FileItem[]` | 是 | 目录下的文件和文件夹列表，已排序（文件夹在前，然后按名称排序）。驱动盘列表中，`items` 包含所有可用的驱动盘 |
+| `total_files` | `usize` | `number` | 是 | 目录中的文件总数（不包括文件夹）。驱动盘列表中此值为 `0` |
+| `total_folders` | `usize` | `number` | 是 | 目录中的文件夹总数。驱动盘列表中此值为可用驱动盘的数量 |
 
 #### 注意事项
 
-1. **排序规则**：`items` 数组已排序，排序规则为：文件夹在前，文件在后，同类型按名称排序
+1. **排序规则**：`items` 数组已排序，排序规则为：文件夹在前，文件在后，同类型按名称排序。驱动盘列表按字母顺序排序（A-Z）
 2. **隐藏文件**：隐藏文件（以 `.` 开头的文件）会被过滤，不会出现在 `items` 中
-3. **父路径**：根目录（如 `C:\`）的 `parent_path` 为 `None`（Rust）或 `undefined`（TypeScript）
+3. **父路径特殊值**：
+   - 普通目录：`parent_path` 为父目录的路径
+   - 驱动盘根目录（如 `C:\`）：`parent_path` 为 `"drives:"`（用于返回驱动盘列表）
+   - 驱动盘列表（`path === "drives:"`）：`parent_path` 为 `None`（最顶层，无父路径）
 4. **统计信息**：`total_files` 和 `total_folders` 只统计非隐藏的文件和文件夹
+5. **驱动盘列表**：当 `path === "drives:"` 时，表示这是驱动盘列表视图，`items` 中的每个项代表一个驱动盘
 
 ---
 
@@ -453,7 +584,8 @@ export interface DirectoryInfo {
 .invoke_handler(tauri::generate_handler![
     commands::greet,
     commands::list_directory,
-    commands::get_home_directory
+    commands::get_home_directory,
+    commands::list_drives
 ])
 ```
 
@@ -512,6 +644,11 @@ export interface DirectoryInfo {
 
 ## 📅 版本记录
 
+### v1.1.0 (2025-12-XX)
+- 添加 `list_drives` 接口，支持获取 Windows 驱动盘列表
+- 优化 `list_directory` 接口，支持驱动盘根目录的特殊处理（`parent_path` 为 `"drives:"`）
+- 更新 `DirectoryInfo` 数据结构说明，添加驱动盘列表相关说明
+
 ### v1.0.0 (2025-12-XX)
 - 初始版本
 - 添加文件系统接口文档
@@ -524,5 +661,5 @@ export interface DirectoryInfo {
 
 **文档维护者**：开发团队
 **最后更新**：2025-12-XX
-**文档版本**：v1.0.0
+**文档版本**：v1.1.0
 

@@ -54,6 +54,11 @@ const {
 
 // 是否可以返回上级目录
 const canGoUp = computed(() => {
+  // 如果当前路径是 "驱动盘" 或显示为 "drives:"，则不应该显示返回按钮
+  const current = currentPath.value;
+  if (current === '驱动盘' || directoryInfo.value?.path === 'drives:') {
+    return false;
+  }
   return directoryInfo.value?.parent_path != null;
 });
 

@@ -106,12 +106,58 @@ impl FileSystemService {
             }
         });
 
+        // 规范化当前路径（统一驱动盘格式为 X:\）
+        let normalized_path = if Self::is_drive_root(path) {
+            #[cfg(windows)]
+            {
+                let path_trimmed = path.trim();
+                let normalized = path_trimmed.replace('/', "\\").to_uppercase();
+                if normalized.len() == 2 && normalized.ends_with(':') {
+                    format!("{}\\", normalized)
+                } else {
+                    normalized
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                path.to_string()
+            }
+        } else {
+            path.to_string()
+        };
+
         // 获取父路径
-        let parent_path = dir_path.parent()
-            .map(|p| p.to_string_lossy().to_string());
+        let parent_path = if Self::is_drive_root(path) {
+            // 如果是驱动盘根目录，父路径设为 "drives:"，用于显示驱动盘列表
+            Some("drives:".to_string())
+        } else {
+            dir_path.parent()
+                .map(|p| {
+                    let parent = p.to_string_lossy().to_string();
+                    // 规范化父路径（如果是驱动盘根目录）
+                    if Self::is_drive_root(&parent) {
+                        #[cfg(windows)]
+                        {
+                            let parent_trimmed = parent.trim();
+                            let parent_normalized = parent_trimmed.replace('/', "\\").to_uppercase();
+                            if parent_normalized.len() == 2 && parent_normalized.ends_with(':') {
+                                format!("{}\\", parent_normalized)
+                            } else {
+                                parent_normalized
+                            }
+                        }
+                        #[cfg(not(windows))]
+                        {
+                            parent
+                        }
+                    } else {
+                        parent
+                    }
+                })
+        };
 
         Ok(DirectoryInfo {
-            path: path.to_string(),
+            path: normalized_path,
             parent_path,
             items,
             total_files,
@@ -149,6 +195,102 @@ impl FileSystemService {
         }
 
         Err("无法获取用户主目录".to_string())
+    }
+
+    /// 检查路径是否为 Windows 驱动盘根目录
+    ///
+    /// # 参数
+    /// - `path`: 路径字符串
+    ///
+    /// # 返回
+    /// 如果路径是驱动盘根目录（如 "C:\"、"C:/" 或 "C:"），返回 true
+    fn is_drive_root(path: &str) -> bool {
+        #[cfg(windows)]
+        {
+            let path_trimmed = path.trim();
+            // Windows 驱动盘格式：C:\、C:/ 或 C:
+            // 规范化路径：将斜杠统一为反斜杠
+            let normalized = path_trimmed.replace('/', "\\").to_uppercase();
+
+            // 匹配格式：X:\ 或 X:（长度为2或3）
+            if normalized.len() == 3 && normalized.ends_with(":\\") {
+                let drive_letter = normalized.chars().next().unwrap();
+                return drive_letter.is_ascii_alphabetic();
+            } else if normalized.len() == 2 && normalized.ends_with(':') {
+                let drive_letter = normalized.chars().next().unwrap();
+                return drive_letter.is_ascii_alphabetic();
+            }
+        }
+        false
+    }
+
+    /// 获取所有 Windows 驱动盘列表
+    ///
+    /// # 返回
+    /// - `Ok(DirectoryInfo)`: 包含所有驱动盘的目录信息
+    /// - `Err(String)`: 错误信息
+    pub fn list_drives() -> Result<DirectoryInfo, String> {
+        #[cfg(windows)]
+        {
+            let mut items = Vec::new();
+
+            // 遍历 A-Z 驱动盘
+            for drive_letter in b'A'..=b'Z' {
+                let drive = format!("{}:\\", drive_letter as char);
+                let drive_path = Path::new(&drive);
+
+                // 检查驱动盘是否存在
+                if drive_path.exists() {
+                    // 获取驱动盘的元数据
+                    let metadata = match fs::metadata(drive_path) {
+                        Ok(m) => m,
+                        Err(_) => continue,
+                    };
+
+                    // 获取修改时间和创建时间
+                    let modified = metadata.modified()
+                        .unwrap_or_else(|_| std::time::SystemTime::UNIX_EPOCH);
+                    let created = metadata.created()
+                        .unwrap_or(modified);
+
+                    let modified_date = Self::format_iso8601(&modified);
+                    let created_date = Self::format_iso8601(&created);
+
+                    let item = FileItem {
+                        id: drive.clone(),
+                        name: format!("{}:", drive_letter as char),
+                        path: drive.clone(),
+                        file_type: "folder".to_string(),
+                        size: 0,
+                        modified_date,
+                        created_date,
+                        extension: None,
+                        is_hidden: false,
+                    };
+
+                    items.push(item);
+                }
+            }
+
+            // 按驱动盘字母排序
+            items.sort_by(|a, b| a.name.cmp(&b.name));
+
+            let total_folders = items.len();
+
+            Ok(DirectoryInfo {
+                path: "drives:".to_string(),
+                parent_path: None,
+                items,
+                total_files: 0,
+                total_folders,
+            })
+        }
+
+        #[cfg(not(windows))]
+        {
+            // 非 Windows 系统返回根目录
+            Err("此功能仅支持 Windows 系统".to_string())
+        }
     }
 
     /// 格式化时间为 ISO 8601 格式

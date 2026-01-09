@@ -71,3 +71,15 @@ pub async fn list_directory(path: String) -> Result<DirectoryInfo, String> {
 pub async fn get_home_directory() -> Result<String, String> {
     FileSystemService::get_home_directory()
 }
+
+/// 获取所有驱动盘列表
+///
+/// 获取 Windows 系统中所有可用的驱动盘列表
+///
+/// # 返回
+/// - `Ok(DirectoryInfo)`: 包含所有驱动盘的目录信息
+/// - `Err(String)`: 错误信息
+#[tauri::command]
+pub async fn list_drives() -> Result<DirectoryInfo, String> {
+    FileSystemService::list_drives()
+}
