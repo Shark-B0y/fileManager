@@ -60,6 +60,56 @@
       />
     </div>
 
+    <!-- 搜索栏 -->
+    <div class="search-container" :class="{ 'is-dropdown-open': isSearchDropdownOpen }">
+      <div class="search-input-wrapper">
+        <input
+          ref="searchInputRef"
+          v-model="searchQuery"
+          type="text"
+          class="search-input"
+          :placeholder="getSearchPlaceholder"
+          @input="handleSearchInput"
+          @keydown.esc="handleSearchEscape"
+          @focus="handleSearchInputFocus"
+        />
+        <button
+          class="search-dropdown-btn"
+          @click.stop="toggleSearchDropdown"
+          :title="getSearchTypeLabel"
+        >
+          <span class="dropdown-arrow">▼</span>
+        </button>
+      </div>
+
+      <!-- 搜索类型页签 -->
+      <transition name="dropdown-fade">
+        <div v-if="isSearchDropdownOpen" class="search-tabs">
+          <div
+            class="search-tab"
+            :class="{ active: searchType === 'file' }"
+            @click="selectSearchType('file')"
+          >
+            文件搜索
+          </div>
+          <div
+            class="search-tab disabled"
+            @click.stop
+          >
+            标签搜索
+            <span class="coming-soon">（即将推出）</span>
+          </div>
+          <div
+            class="search-tab disabled"
+            @click.stop
+          >
+            内容搜索
+            <span class="coming-soon">（即将推出）</span>
+          </div>
+        </div>
+      </transition>
+    </div>
+
     <!-- 错误提示消息 -->
     <transition name="error-fade">
       <div v-if="errorMessage" class="error-message">
@@ -74,6 +124,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { useFileSystem } from '../composables/useFileSystem';
 import { useNavigation } from '../composables/useNavigation';
+import { useSearch } from '../composables/useSearch';
 
 const {
   currentPath: fsCurrentPath,
@@ -95,10 +146,25 @@ const {
   initialize: initNavigation,
 } = useNavigation();
 
+// 搜索功能
+const {
+  searchQuery,
+  searchType,
+  searchResult,
+  performSearch,
+  clearSearch,
+} = useSearch();
+
 // 路径输入框引用
 const pathInputRef = ref<HTMLInputElement | null>(null);
 const pathInputValue = ref<string>('');
 const isPathInputFocused = ref(false);
+
+// 搜索输入框引用
+const searchInputRef = ref<HTMLInputElement | null>(null);
+
+// 搜索下拉菜单状态
+const isSearchDropdownOpen = ref(false);
 
 // 错误提示消息
 const errorMessage = ref<string>('');
@@ -287,6 +353,82 @@ function showErrorMessage(message: string) {
   }, 2000);
 }
 
+// 处理搜索输入
+function handleSearchInput() {
+  if (directoryInfo.value?.items) {
+    performSearch(directoryInfo.value.items);
+    // 触发搜索事件，通知 MainContent 组件
+    window.dispatchEvent(new CustomEvent('file-search', {
+      detail: { query: searchQuery.value, result: searchResult.value }
+    }));
+  }
+}
+
+// 获取搜索类型标签
+const getSearchTypeLabel = computed(() => {
+  const labels: Record<string, string> = {
+    file: '文件搜索',
+    tag: '标签搜索',
+    content: '内容搜索',
+  };
+  return labels[searchType.value] || '文件搜索';
+});
+
+// 获取搜索占位符
+const getSearchPlaceholder = computed(() => {
+  return `搜索${getSearchTypeLabel.value}...`;
+});
+
+// 切换搜索下拉菜单
+function toggleSearchDropdown() {
+  isSearchDropdownOpen.value = !isSearchDropdownOpen.value;
+}
+
+// 选择搜索类型
+function selectSearchType(type: 'file' | 'tag' | 'content') {
+  if (type === 'file') {
+    searchType.value = type;
+    isSearchDropdownOpen.value = false;
+
+    // 当搜索类型改变时，重新执行搜索
+    if (searchQuery.value && directoryInfo.value?.items) {
+      performSearch(directoryInfo.value.items);
+      window.dispatchEvent(new CustomEvent('file-search', {
+        detail: { query: searchQuery.value, result: searchResult.value }
+      }));
+    }
+  }
+}
+
+// 处理搜索输入框获得焦点
+function handleSearchInputFocus() {
+  // 输入框获得焦点时不关闭下拉菜单（由点击外部关闭）
+}
+
+// 处理搜索 ESC 键（清除搜索）
+function handleSearchEscape() {
+  if (isSearchDropdownOpen.value) {
+    // 如果下拉菜单打开，先关闭下拉菜单
+    isSearchDropdownOpen.value = false;
+  } else {
+    // 否则清除搜索
+    clearSearch();
+    searchInputRef.value?.blur();
+    window.dispatchEvent(new CustomEvent('file-search', {
+      detail: { query: '', result: null }
+    }));
+  }
+}
+
+// 点击外部关闭下拉菜单
+function handleClickOutside(event: MouseEvent) {
+  const target = event.target as HTMLElement;
+  const searchContainer = target.closest('.search-container');
+  if (!searchContainer && isSearchDropdownOpen.value) {
+    isSearchDropdownOpen.value = false;
+  }
+}
+
 // 监听路径变化，更新导航历史和输入框显示
 // 只有当路径不是通过导航按钮改变时（如点击文件夹），才更新导航历史
 watch([fsCurrentPath, directoryInfo], () => {
@@ -314,6 +456,14 @@ watch([fsCurrentPath, directoryInfo], () => {
   // 更新输入框显示（仅在输入框未获得焦点时）
   if (!isPathInputFocused.value) {
     pathInputValue.value = '';
+  }
+
+  // 当目录变化时，如果搜索框有内容，重新执行搜索
+  if (searchQuery.value && directoryInfo.value?.items) {
+    performSearch(directoryInfo.value.items);
+    window.dispatchEvent(new CustomEvent('file-search', {
+      detail: { query: searchQuery.value, result: searchResult.value }
+    }));
   }
 }, { deep: true });
 
@@ -343,6 +493,7 @@ function handleKeyDown(event: KeyboardEvent) {
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeyDown);
+  document.addEventListener('click', handleClickOutside);
   // 初始化导航历史
   if (fsCurrentPath.value) {
     const path = fsCurrentPath.value === '驱动盘' ? 'drives:' : fsCurrentPath.value;
@@ -352,6 +503,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown);
+  document.removeEventListener('click', handleClickOutside);
   // 清理错误提示定时器
   if (errorTimer !== null) {
     clearTimeout(errorTimer);
@@ -449,6 +601,169 @@ onUnmounted(() => {
 
 .path-input:focus {
   outline: none;
+}
+
+/* 搜索栏样式 */
+.search-container {
+  position: relative;
+  flex-shrink: 0;
+  min-width: 250px;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 32px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background-color: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.search-container:focus-within .search-input-wrapper,
+.search-container.is-dropdown-open .search-input-wrapper {
+  border-color: #2196f3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 4px 32px 4px 8px;
+  border: none;
+  background-color: transparent;
+  font-size: 14px;
+  color: #212121;
+  font-family: inherit;
+  outline: none;
+}
+
+.search-input::placeholder {
+  color: #999;
+  opacity: 0.7;
+}
+
+.search-dropdown-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 24px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background-color: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s, background-color 0.15s;
+  outline: none;
+  z-index: 1;
+}
+
+/* 鼠标悬停搜索框右侧时显示下拉按钮 */
+.search-input-wrapper:hover .search-dropdown-btn,
+.search-container.is-dropdown-open .search-dropdown-btn {
+  opacity: 1;
+}
+
+.search-dropdown-btn:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.search-dropdown-btn:active {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dropdown-arrow {
+  font-size: 10px;
+  color: #666;
+  transition: transform 0.2s;
+}
+
+.search-container.is-dropdown-open .dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+/* 搜索类型页签样式 */
+.search-tabs {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+}
+
+.search-tab {
+  flex: 1;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: #212121;
+  cursor: pointer;
+  text-align: center;
+  border-radius: 2px;
+  transition: background-color 0.15s, color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.search-tab:hover:not(.disabled) {
+  background-color: #f5f5f5;
+}
+
+.search-tab.active {
+  background-color: #e3f2fd;
+  color: #2196f3;
+  font-weight: 500;
+}
+
+.search-tab.disabled {
+  color: #999;
+  cursor: not-allowed;
+  font-style: italic;
+  opacity: 0.6;
+}
+
+.search-tab.disabled:hover {
+  background-color: transparent;
+}
+
+.coming-soon {
+  font-size: 11px;
+  color: #999;
+  margin-left: 4px;
+}
+
+/* 页签动画 */
+.dropdown-fade-enter-active {
+  transition: opacity 0.2s ease-in, transform 0.2s ease-in;
+}
+
+.dropdown-fade-leave-active {
+  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+}
+
+.dropdown-fade-enter-from {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.dropdown-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 
 /* 错误提示消息样式 */

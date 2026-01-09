@@ -11,6 +11,7 @@
 
     <FileList
       v-else-if="directoryInfo"
+      ref="fileListRef"
       :items="directoryInfo.items"
       :selected-item-ids="selectedItemIds"
       @item-click="handleItemClick"
@@ -24,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useFileSystem } from '../composables/useFileSystem';
 import FileList from './FileList.vue';
 import type { FileItem } from '../types/file';
@@ -41,6 +42,9 @@ const {
 
 // 选中的文件/文件夹 ID 集合
 const selectedItemIds = ref<Set<string>>(new Set());
+
+// FileList 组件引用
+const fileListRef = ref<InstanceType<typeof FileList> | null>(null);
 
 // 监听目录变化，清除选中状态
 watch(directoryInfo, () => {
@@ -90,6 +94,35 @@ function handleRetry() {
     initialize();
   }
 }
+
+// 处理搜索事件
+function handleSearchEvent(event: CustomEvent) {
+  const { result } = event.detail;
+
+  if (result) {
+    // 选中搜索到的文件
+    selectedItemIds.value = new Set([result.id]);
+
+    // 滚动到该文件
+    nextTick(() => {
+      if (fileListRef.value) {
+        fileListRef.value.scrollToItem(result.id);
+      }
+    });
+  } else {
+    // 如果没有搜索结果，清除选中状态
+    selectedItemIds.value = new Set();
+  }
+}
+
+// 监听搜索事件
+onMounted(() => {
+  window.addEventListener('file-search', handleSearchEvent as EventListener);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('file-search', handleSearchEvent as EventListener);
+});
 
 // 初始化
 initialize();

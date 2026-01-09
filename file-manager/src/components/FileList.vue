@@ -7,10 +7,11 @@
       <div class="header-cell size-cell">大小</div>
     </div>
 
-    <div class="list-body">
+    <div ref="listBodyRef" class="list-body">
       <FileItem
         v-for="item in items"
         :key="item.id"
+        :ref="(el) => setItemRef(el, item.id)"
         :item="item"
         :is-selected="selectedItemIdsSet.has(item.id)"
         @click="(item, event) => handleItemClick(item, event)"
@@ -21,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, nextTick } from 'vue';
 import FileItem from './FileItem.vue';
 import type { FileItem as FileItemType } from '../types/file';
 
@@ -34,6 +35,26 @@ const emit = defineEmits<{
   'item-click': [item: FileItemType, event: MouseEvent];
   'item-double-click': [item: FileItemType];
 }>();
+
+// 列表容器引用
+const listBodyRef = ref<HTMLDivElement | null>(null);
+
+// 文件项引用映射
+const itemRefs = ref<Map<string, HTMLElement>>(new Map());
+
+// 设置文件项引用
+function setItemRef(el: any, id: string) {
+  if (el) {
+    // Vue 3 组件实例有 $el 属性，普通元素直接使用
+    const element = el.$el || el;
+    if (element instanceof HTMLElement) {
+      itemRefs.value.set(id, element);
+    }
+  } else {
+    // 元素被卸载时，移除引用
+    itemRefs.value.delete(id);
+  }
+}
 
 // 将 props 中的 selectedItemIds 转换为 Set（如果是数组的话）
 const selectedItemIdsSet = computed(() => {
@@ -52,6 +73,33 @@ function handleItemClick(item: FileItemType, event: MouseEvent) {
 function handleItemDoubleClick(item: FileItemType) {
   emit('item-double-click', item);
 }
+
+// 滚动到指定文件项
+function scrollToItem(itemId: string) {
+  nextTick(() => {
+    const itemElement = itemRefs.value.get(itemId);
+    if (itemElement && listBodyRef.value) {
+      // 计算元素相对于滚动容器的位置
+      const containerRect = listBodyRef.value.getBoundingClientRect();
+      const itemRect = itemElement.getBoundingClientRect();
+
+      // 计算需要滚动的距离
+      const scrollTop = listBodyRef.value.scrollTop;
+      const itemOffsetTop = itemRect.top - containerRect.top + scrollTop;
+
+      // 滚动到该位置，并留出一些边距
+      listBodyRef.value.scrollTo({
+        top: itemOffsetTop - 10, // 向上留出10px边距
+        behavior: 'smooth',
+      });
+    }
+  });
+}
+
+// 暴露方法给父组件
+defineExpose({
+  scrollToItem,
+});
 </script>
 
 <style scoped>
