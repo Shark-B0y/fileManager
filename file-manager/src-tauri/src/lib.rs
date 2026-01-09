@@ -40,7 +40,8 @@ pub fn run() {
             commands::greet,
             commands::list_directory,
             commands::get_home_directory,
-            commands::list_drives
+            commands::list_drives,
+            commands::check_path_exists
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

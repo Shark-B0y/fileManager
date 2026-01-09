@@ -45,15 +45,26 @@
       </button>
     </div>
 
-    <!-- 路径显示 -->
+    <!-- 路径输入框 -->
     <div class="path-display">
-      <span class="current-path">{{ displayPath }}</span>
+      <input
+        ref="pathInputRef"
+        v-model="pathInputValue"
+        type="text"
+        class="path-input"
+        :placeholder="displayPathPlaceholder"
+        @keydown.enter="handlePathInput"
+        @keydown.esc="handlePathInputEscape"
+        @blur="handlePathInputBlur"
+        @focus="handlePathInputFocus"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import { useFileSystem } from '../composables/useFileSystem';
 import { useNavigation } from '../composables/useNavigation';
 
@@ -77,6 +88,11 @@ const {
   initialize: initNavigation,
 } = useNavigation();
 
+// 路径输入框引用
+const pathInputRef = ref<HTMLInputElement | null>(null);
+const pathInputValue = ref<string>('');
+const isPathInputFocused = ref(false);
+
 // 显示路径（如果是驱动盘列表，显示中文；否则显示实际路径）
 const displayPath = computed(() => {
   const path = fsCurrentPath.value;
@@ -84,6 +100,11 @@ const displayPath = computed(() => {
     return '驱动盘';
   }
   return path || '未知路径';
+});
+
+// 路径输入框占位符（当输入框为空时显示）
+const displayPathPlaceholder = computed(() => {
+  return displayPath.value || '输入路径';
 });
 
 // 是否可以向上（进入父级目录）
@@ -143,15 +164,111 @@ async function handleRefresh() {
   await refresh();
 }
 
+// 处理路径输入框获得焦点
+function handlePathInputFocus() {
+  isPathInputFocused.value = true;
+  // 获得焦点时，如果输入框为空，填入当前路径
+  if (!pathInputValue.value) {
+    const current = fsCurrentPath.value;
+    if (current !== '驱动盘' && current) {
+      pathInputValue.value = current;
+      // 选中所有文本，方便用户快速替换
+      nextTick(() => {
+        pathInputRef.value?.select();
+      });
+    }
+  }
+}
+
+// 处理 ESC 键（取消输入）
+function handlePathInputEscape() {
+  pathInputValue.value = '';
+  pathInputRef.value?.blur();
+}
+
+// 处理路径输入框失去焦点
+function handlePathInputBlur() {
+  isPathInputFocused.value = false;
+  // 失去焦点时，如果输入框内容未提交或无效，恢复为空（显示占位符）
+  nextTick(() => {
+    const inputPath = pathInputValue.value.trim();
+    // 如果输入框内容与当前路径相同，清空（会显示占位符）
+    if (inputPath === fsCurrentPath.value || !inputPath) {
+      pathInputValue.value = '';
+    }
+  });
+}
+
+// 处理路径输入（回车键时）
+async function handlePathInput() {
+  const inputPath = pathInputValue.value.trim();
+
+  // 如果输入为空，恢复为空（显示占位符）
+  if (!inputPath) {
+    pathInputValue.value = '';
+    pathInputRef.value?.blur();
+    return;
+  }
+
+  // 如果输入的路径与当前路径相同，不做任何操作
+  if (inputPath === fsCurrentPath.value) {
+    pathInputValue.value = '';
+    pathInputRef.value?.blur();
+    return;
+  }
+
+  // 如果是驱动盘列表，不处理
+  if (inputPath === '驱动盘' || inputPath === 'drives:') {
+    pathInputValue.value = '';
+    pathInputRef.value?.blur();
+    return;
+  }
+
+  try {
+    // 检查路径是否存在
+    const exists = await invoke<boolean>('check_path_exists', { path: inputPath });
+
+    if (exists) {
+      // 路径存在，跳转到该目录
+      isNavigating = true;
+      await loadDirectory(inputPath);
+
+      // 更新导航历史
+      navigateTo(inputPath);
+
+      // 清空输入框
+      pathInputValue.value = '';
+      pathInputRef.value?.blur();
+    } else {
+      // 路径不存在，弹出提示框
+      alert(`路径不存在: ${inputPath}`);
+      // 清空输入框，失去焦点后会自动恢复为当前路径（占位符）
+      pathInputValue.value = '';
+      pathInputRef.value?.blur();
+    }
+  } catch (error) {
+    // 发生错误，弹出提示框
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    alert(`无法访问路径: ${errorMessage}`);
+    // 清空输入框
+    pathInputValue.value = '';
+    pathInputRef.value?.blur();
+  }
+}
+
 // 标记是否正在执行导航操作（返回/前进/向上），避免重复记录历史
 let isNavigating = false;
 
-// 监听路径变化，更新导航历史
+// 监听路径变化，更新导航历史和输入框显示
 // 只有当路径不是通过导航按钮改变时（如点击文件夹），才更新导航历史
 watch([fsCurrentPath, directoryInfo], () => {
   // 如果正在执行导航操作，不更新历史（导航操作已经手动更新了历史）
   if (isNavigating) {
     isNavigating = false;
+    // 清空输入框
+    if (!isPathInputFocused.value) {
+      pathInputValue.value = '';
+    }
     return;
   }
 
@@ -164,6 +281,11 @@ watch([fsCurrentPath, directoryInfo], () => {
   // 如果当前导航历史中的路径与当前路径不同，说明是用户点击文件夹进入新目录
   if (pathToRecord && navCurrentPath.value !== pathToRecord) {
     navigateTo(pathToRecord);
+  }
+
+  // 更新输入框显示（仅在输入框未获得焦点时）
+  if (!isPathInputFocused.value) {
+    pathInputValue.value = '';
   }
 }, { deep: true });
 
@@ -260,7 +382,7 @@ onUnmounted(() => {
   min-width: 0;
   display: flex;
   align-items: center;
-  padding: 4px 8px;
+  padding: 0;
   background-color: #fff;
   border: 1px solid #ccc;
   border-radius: 3px;
@@ -268,14 +390,32 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.current-path {
+.path-input {
   flex: 1;
+  width: 100%;
+  height: 100%;
+  padding: 4px 8px;
+  border: none;
+  outline: none;
+  background-color: transparent;
   font-size: 14px;
   color: #212121;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 24px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.path-input::placeholder {
+  color: #999;
+  opacity: 0.7;
+}
+
+.path-display:focus-within {
+  border-color: #2196f3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+}
+
+.path-input:focus {
+  outline: none;
 }
 </style>
 

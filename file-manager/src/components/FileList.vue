@@ -12,30 +12,41 @@
         v-for="item in items"
         :key="item.id"
         :item="item"
-        :is-selected="item.id === selectedItemId"
-        @click="handleItemClick(item)"
-        @dblclick="handleItemDoubleClick(item)"
+        :is-selected="selectedItemIdsSet.has(item.id)"
+        @click="(item, event) => handleItemClick(item, event)"
+        @dblclick="(item) => handleItemDoubleClick(item)"
       />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import FileItem from './FileItem.vue';
 import type { FileItem as FileItemType } from '../types/file';
 
-defineProps<{
+const props = defineProps<{
   items: FileItemType[];
-  selectedItemId?: string | null;
+  selectedItemIds?: Set<string> | string[];
 }>();
 
 const emit = defineEmits<{
-  'item-click': [item: FileItemType];
+  'item-click': [item: FileItemType, event: MouseEvent];
   'item-double-click': [item: FileItemType];
 }>();
 
-function handleItemClick(item: FileItemType) {
-  emit('item-click', item);
+// 将 props 中的 selectedItemIds 转换为 Set（如果是数组的话）
+const selectedItemIdsSet = computed(() => {
+  if (props.selectedItemIds instanceof Set) {
+    return props.selectedItemIds;
+  } else if (Array.isArray(props.selectedItemIds)) {
+    return new Set(props.selectedItemIds);
+  }
+  return new Set<string>();
+});
+
+function handleItemClick(item: FileItemType, event: MouseEvent) {
+  emit('item-click', item, event);
 }
 
 function handleItemDoubleClick(item: FileItemType) {

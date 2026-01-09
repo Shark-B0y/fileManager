@@ -36,7 +36,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  click: [item: FileItem];
+  click: [item: FileItem, event: MouseEvent];
   dblclick: [item: FileItem];
 }>();
 
@@ -59,37 +59,42 @@ const typeName = computed(() => {
   return getFileTypeName(props.item);
 });
 
-// 用于防止双击时触发两次单击事件
-let clickTimer: ReturnType<typeof setTimeout> | null = null;
+// 用于防止双击时触发选中操作
+let lastClickTime = 0;
+let lastClickItem: FileItem | null = null;
 
-function handleClick() {
-  // 延迟执行单击事件，如果在此延迟内发生双击，则取消单击事件
-  if (clickTimer) {
-    clearTimeout(clickTimer);
+function handleClick(event: MouseEvent) {
+  const isCtrlPressed = event.ctrlKey || event.metaKey; // 支持 Mac 的 Cmd 键
+  const now = Date.now();
+  const isSameItem = lastClickItem === props.item;
+  const timeSinceLastClick = now - lastClickTime;
+
+  // Ctrl+单击：立即执行，不受双击检测影响（多选模式）
+  if (isCtrlPressed) {
+    emit('click', props.item, event);
+  } else {
+    // 普通单击：如果是300ms内对同一个item的第二次点击，可能是双击，不执行单击
+    // 否则立即执行单击（立即更新选中状态）
+    if (!(isSameItem && timeSinceLastClick < 300)) {
+      emit('click', props.item, event);
+    }
   }
 
-  clickTimer = setTimeout(() => {
-    emit('click', props.item);
-    clickTimer = null;
-  }, 200); // 200ms 延迟，如果在此时间内发生双击，则取消单击
+  // 记录点击时间和item（仅记录非Ctrl的点击，用于双击检测）
+  if (!isCtrlPressed) {
+    lastClickTime = now;
+    lastClickItem = props.item;
+  }
 }
 
 function handleDoubleClick() {
-  // 清除单击事件的定时器，避免双击时触发单击
-  if (clickTimer) {
-    clearTimeout(clickTimer);
-    clickTimer = null;
-  }
-
+  // 双击时立即触发双击事件（如果是文件夹，会进入新目录，自动清除选中状态）
   emit('dblclick', props.item);
 }
 
-// 组件卸载时清理定时器
+// 组件卸载时清理
 onUnmounted(() => {
-  if (clickTimer) {
-    clearTimeout(clickTimer);
-    clickTimer = null;
-  }
+  lastClickItem = null;
 });
 </script>
 
@@ -100,7 +105,7 @@ onUnmounted(() => {
   padding: 8px 16px;
   border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
-  transition: background-color 0.15s;
+  transition: background-color 0.1s, border-color 0.1s;
   user-select: none;
 }
 

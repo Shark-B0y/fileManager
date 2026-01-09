@@ -26,8 +26,9 @@
   - [1. list_directory - 获取目录内容](#1-list_directory---获取目录内容)
   - [2. get_home_directory - 获取用户主目录](#2-get_home_directory---获取用户主目录)
   - [3. list_drives - 获取驱动盘列表](#3-list_drives---获取驱动盘列表)
+  - [4. check_path_exists - 检查路径是否存在](#4-check_path_exists---检查路径是否存在)
 - [示例命令](#示例命令)
-  - [4. greet - 问候命令](#4-greet---问候命令)
+  - [5. greet - 问候命令](#5-greet---问候命令)
 - [数据结构定义](#数据结构定义)
   - [FileItem - 文件项](#fileitem---文件项)
   - [DirectoryInfo - 目录信息](#directoryinfo---目录信息)
@@ -360,9 +361,129 @@ async function loadDrives() {
 
 ---
 
+### 4. check_path_exists - 检查路径是否存在
+
+**功能描述**：检查指定路径是否存在且为目录。用于验证用户输入的路径是否有效，在导航栏路径输入框中使用。
+
+**接口名称**：`check_path_exists`
+
+**调用方式**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+const exists = await invoke<boolean>('check_path_exists', {
+  path: 'C:\\Users\\Username'
+});
+```
+
+#### 请求参数
+
+**Rust 后端**：
+```rust
+#[tauri::command]
+pub async fn check_path_exists(path: String) -> Result<bool, String>
+```
+
+**参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| `path` | `String` | 是 | 要检查的路径（Windows 路径格式，如：`C:\\Users\\Username`） |
+
+**TypeScript 前端**：
+```typescript
+interface CheckPathExistsRequest {
+  path: string;
+}
+```
+
+#### 返回数据
+
+**成功返回**：`boolean`
+
+- `true`：路径存在且为目录
+- `false`：路径不存在或不是目录
+
+**错误返回**：`String` 错误信息
+
+**常见错误**：
+- 一般情况下不会返回错误，只返回 `false` 表示路径不存在
+- 可能的系统错误会被转换为字符串返回
+
+#### 数据结构
+
+**返回类型**：`boolean`
+
+**示例返回值**：
+- `true` - 路径存在且为目录
+- `false` - 路径不存在或不是目录
+
+#### 使用示例
+
+**前端调用**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+async function validateAndNavigate(inputPath: string): Promise<void> {
+  try {
+    const exists = await invoke<boolean>('check_path_exists', { path: inputPath });
+
+    if (exists) {
+      // 路径存在，跳转到该目录
+      await loadDirectory(inputPath);
+    } else {
+      // 路径不存在，弹出提示框
+      alert(`路径不存在: ${inputPath}`);
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    alert(`无法访问路径: ${errorMessage}`);
+  }
+}
+
+// 使用示例
+await validateAndNavigate('C:\\Users\\Username');
+```
+
+**后端实现** (`src-tauri/src/commands.rs`)：
+```rust
+#[tauri::command]
+pub async fn check_path_exists(path: String) -> Result<bool, String> {
+    FileSystemService::check_path_exists(&path)
+}
+```
+
+**后端服务实现** (`src-tauri/src/services/file_system.rs`)：
+```rust
+pub fn check_path_exists(path: &str) -> Result<bool, String> {
+    let dir_path = Path::new(path);
+
+    // 检查路径是否存在
+    if !dir_path.exists() {
+        return Ok(false);
+    }
+
+    // 检查是否为目录
+    if !dir_path.is_dir() {
+        return Ok(false);
+    }
+
+    Ok(true)
+}
+```
+
+#### 注意事项
+
+1. **只检查目录**：此接口只返回 `true` 当路径存在且为目录时。如果路径是文件而非目录，将返回 `false`
+2. **路径格式**：Windows 路径使用反斜杠（`\`），需要转义为 `\\`
+3. **权限问题**：如果路径存在但无权限访问，可能会返回 `false` 或错误
+4. **使用场景**：主要用于导航栏路径输入框的验证，在用户输入路径后按回车键时验证路径的有效性
+
+---
+
 ## 示例命令
 
-### 4. greet - 问候命令
+### 5. greet - 问候命令
 
 **功能描述**：示例命令，用于测试前后端通信是否正常。
 
@@ -585,7 +706,8 @@ export interface DirectoryInfo {
     commands::greet,
     commands::list_directory,
     commands::get_home_directory,
-    commands::list_drives
+    commands::list_drives,
+    commands::check_path_exists
 ])
 ```
 
@@ -644,6 +766,11 @@ export interface DirectoryInfo {
 
 ## 📅 版本记录
 
+### v1.2.0 (2025-12-XX)
+- 添加 `check_path_exists` 接口，支持检查路径是否存在且为目录
+- 导航栏路径显示改为可编辑输入框，支持直接输入路径跳转
+- 优化路径输入体验，支持 ESC 键取消输入
+
 ### v1.1.0 (2025-12-XX)
 - 添加 `list_drives` 接口，支持获取 Windows 驱动盘列表
 - 优化 `list_directory` 接口，支持驱动盘根目录的特殊处理（`parent_path` 为 `"drives:"`）
@@ -661,5 +788,5 @@ export interface DirectoryInfo {
 
 **文档维护者**：开发团队
 **最后更新**：2025-12-XX
-**文档版本**：v1.1.0
+**文档版本**：v1.2.0
 

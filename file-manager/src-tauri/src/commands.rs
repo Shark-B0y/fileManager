@@ -83,3 +83,19 @@ pub async fn get_home_directory() -> Result<String, String> {
 pub async fn list_drives() -> Result<DirectoryInfo, String> {
     FileSystemService::list_drives()
 }
+
+/// 检查路径是否存在且为目录
+///
+/// 验证指定路径是否存在并且是一个目录
+///
+/// # 参数
+/// - `path`: 要检查的路径
+///
+/// # 返回
+/// - `Ok(true)`: 路径存在且为目录
+/// - `Ok(false)`: 路径不存在或不是目录
+/// - `Err(String)`: 错误信息
+#[tauri::command]
+pub async fn check_path_exists(path: String) -> Result<bool, String> {
+    FileSystemService::check_path_exists(&path)
+}

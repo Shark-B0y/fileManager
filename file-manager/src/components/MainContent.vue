@@ -12,7 +12,7 @@
     <FileList
       v-else-if="directoryInfo"
       :items="directoryInfo.items"
-      :selected-item-id="selectedItemId"
+      :selected-item-ids="selectedItemIds"
       @item-click="handleItemClick"
       @item-double-click="handleItemDoubleClick"
     />
@@ -39,21 +39,32 @@ const {
   loadDrives,
 } = useFileSystem();
 
-// 选中的文件/文件夹 ID
-const selectedItemId = ref<string | null>(null);
+// 选中的文件/文件夹 ID 集合
+const selectedItemIds = ref<Set<string>>(new Set());
 
 // 监听目录变化，清除选中状态
 watch(directoryInfo, () => {
-  selectedItemId.value = null;
+  selectedItemIds.value = new Set();
 });
 
 // 处理文件项单击（选中）
-function handleItemClick(item: FileItem) {
-  // 如果点击的是已选中的项，则取消选中；否则选中该项
-  if (selectedItemId.value === item.id) {
-    selectedItemId.value = null;
+function handleItemClick(item: FileItem, event: MouseEvent) {
+  const isCtrlPressed = event.ctrlKey || event.metaKey; // 支持 Mac 的 Cmd 键
+
+  if (isCtrlPressed) {
+    // Ctrl + 单击：多选模式
+    const newSet = new Set(selectedItemIds.value);
+    if (newSet.has(item.id)) {
+      // 如果已选中，则取消选中
+      newSet.delete(item.id);
+    } else {
+      // 如果未选中，则添加到选中列表
+      newSet.add(item.id);
+    }
+    selectedItemIds.value = newSet;
   } else {
-    selectedItemId.value = item.id;
+    // 普通单击：单选模式（清除其他选中项）
+    selectedItemIds.value = new Set([item.id]);
   }
 }
 

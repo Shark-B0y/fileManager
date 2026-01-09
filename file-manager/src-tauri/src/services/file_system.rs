@@ -293,6 +293,31 @@ impl FileSystemService {
         }
     }
 
+    /// 检查路径是否存在且为目录
+    ///
+    /// # 参数
+    /// - `path`: 路径字符串
+    ///
+    /// # 返回
+    /// - `Ok(true)`: 路径存在且为目录
+    /// - `Ok(false)`: 路径不存在或不是目录
+    /// - `Err(String)`: 错误信息
+    pub fn check_path_exists(path: &str) -> Result<bool, String> {
+        let dir_path = Path::new(path);
+
+        // 检查路径是否存在
+        if !dir_path.exists() {
+            return Ok(false);
+        }
+
+        // 检查是否为目录
+        if !dir_path.is_dir() {
+            return Ok(false);
+        }
+
+        Ok(true)
+    }
+
     /// 格式化时间为 ISO 8601 格式
     ///
     /// # 参数
