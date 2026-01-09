@@ -1,7 +1,10 @@
 <template>
   <div
     class="file-item"
-    :class="{ 'is-folder': item.file_type === 'folder' }"
+    :class="{
+      'is-folder': item.file_type === 'folder',
+      'is-selected': isSelected
+    }"
     @click="handleClick"
     @dblclick="handleDoubleClick"
   >
@@ -22,17 +25,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onUnmounted } from 'vue';
 import type { FileItem } from '../types/file';
 import { formatFileSize, formatDate, getFileTypeName } from '../utils/formatters';
 import { getIconChar, getFileIcon } from '../utils/icons';
 
 const props = defineProps<{
   item: FileItem;
+  isSelected?: boolean;
 }>();
 
 const emit = defineEmits<{
   click: [item: FileItem];
+  dblclick: [item: FileItem];
 }>();
 
 const iconChar = computed(() => {
@@ -54,14 +59,38 @@ const typeName = computed(() => {
   return getFileTypeName(props.item);
 });
 
+// 用于防止双击时触发两次单击事件
+let clickTimer: ReturnType<typeof setTimeout> | null = null;
+
 function handleClick() {
-  emit('click', props.item);
+  // 延迟执行单击事件，如果在此延迟内发生双击，则取消单击事件
+  if (clickTimer) {
+    clearTimeout(clickTimer);
+  }
+
+  clickTimer = setTimeout(() => {
+    emit('click', props.item);
+    clickTimer = null;
+  }, 200); // 200ms 延迟，如果在此时间内发生双击，则取消单击
 }
 
 function handleDoubleClick() {
-  // 双击事件也会触发 click，这里不需要额外处理
-  emit('click', props.item);
+  // 清除单击事件的定时器，避免双击时触发单击
+  if (clickTimer) {
+    clearTimeout(clickTimer);
+    clickTimer = null;
+  }
+
+  emit('dblclick', props.item);
 }
+
+// 组件卸载时清理定时器
+onUnmounted(() => {
+  if (clickTimer) {
+    clearTimeout(clickTimer);
+    clickTimer = null;
+  }
+});
 </script>
 
 <style scoped>
@@ -72,6 +101,7 @@ function handleDoubleClick() {
   border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
   transition: background-color 0.15s;
+  user-select: none;
 }
 
 .file-item:hover {
@@ -80,6 +110,16 @@ function handleDoubleClick() {
 
 .file-item.is-folder {
   font-weight: 500;
+}
+
+.file-item.is-selected {
+  background-color: #e3f2fd;
+  border-left: 3px solid #2196f3;
+  padding-left: 13px; /* 减去 3px 边框，保持对齐 */
+}
+
+.file-item.is-selected:hover {
+  background-color: #bbdefb;
 }
 
 .item-cell {

@@ -1,19 +1,5 @@
 <template>
   <div class="main-content">
-    <div class="content-header">
-      <div class="path-display">
-        <span class="current-path">{{ currentPath }}</span>
-        <button
-          v-if="canGoUp"
-          @click="handleGoUp"
-          class="go-up-btn"
-          title="返回上级目录"
-        >
-          ↑
-        </button>
-      </div>
-    </div>
-
     <div v-if="loading" class="loading">
       加载中...
     </div>
@@ -26,7 +12,9 @@
     <FileList
       v-else-if="directoryInfo"
       :items="directoryInfo.items"
+      :selected-item-id="selectedItemId"
       @item-click="handleItemClick"
+      @item-double-click="handleItemDoubleClick"
     />
 
     <div v-else class="empty">
@@ -36,51 +24,57 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { ref, watch } from 'vue';
 import { useFileSystem } from '../composables/useFileSystem';
 import FileList from './FileList.vue';
 import type { FileItem } from '../types/file';
 
 const {
-  currentPath,
   directoryInfo,
   loading,
   error,
   enterDirectory,
-  goUp,
   initialize,
   loadDirectory,
+  loadDrives,
 } = useFileSystem();
 
-// 是否可以返回上级目录
-const canGoUp = computed(() => {
-  // 如果当前路径是 "驱动盘" 或显示为 "drives:"，则不应该显示返回按钮
-  const current = currentPath.value;
-  if (current === '驱动盘' || directoryInfo.value?.path === 'drives:') {
-    return false;
-  }
-  return directoryInfo.value?.parent_path != null;
+// 选中的文件/文件夹 ID
+const selectedItemId = ref<string | null>(null);
+
+// 监听目录变化，清除选中状态
+watch(directoryInfo, () => {
+  selectedItemId.value = null;
 });
 
-// 处理文件项点击
+// 处理文件项单击（选中）
 function handleItemClick(item: FileItem) {
-  if (item.file_type === 'folder') {
-    enterDirectory(item.path);
+  // 如果点击的是已选中的项，则取消选中；否则选中该项
+  if (selectedItemId.value === item.id) {
+    selectedItemId.value = null;
   } else {
-    // 文件点击处理（后续实现）
-    console.log('点击文件:', item.name);
+    selectedItemId.value = item.id;
   }
 }
 
-// 返回上级目录
-function handleGoUp() {
-  goUp();
+// 处理文件项双击（进入文件夹）
+function handleItemDoubleClick(item: FileItem) {
+  // 只有文件夹才能通过双击进入
+  if (item.file_type === 'folder') {
+    enterDirectory(item.path);
+  }
 }
 
 // 重试加载
 function handleRetry() {
-  if (currentPath.value) {
-    loadDirectory(currentPath.value);
+  if (directoryInfo.value?.path) {
+    const path = directoryInfo.value.path;
+    if (path === 'drives:') {
+      // 如果是驱动盘列表，重新加载驱动盘
+      loadDrives();
+    } else {
+      loadDirectory(path);
+    }
   } else {
     initialize();
   }
@@ -97,39 +91,6 @@ initialize();
   flex-direction: column;
   overflow: hidden;
   background-color: #ffffff;
-}
-
-.content-header {
-  padding: 8px 16px;
-  border-bottom: 1px solid #e0e0e0;
-  background-color: #f5f5f5;
-}
-
-.path-display {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.current-path {
-  flex: 1;
-  font-size: 14px;
-  color: #212121;
-  word-break: break-all;
-}
-
-.go-up-btn {
-  padding: 4px 12px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  background-color: #fff;
-  cursor: pointer;
-  font-size: 16px;
-  transition: background-color 0.2s;
-}
-
-.go-up-btn:hover {
-  background-color: #f0f0f0;
 }
 
 .loading,

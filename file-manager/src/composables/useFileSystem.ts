@@ -4,11 +4,13 @@ import { ref } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import type { FileItem, DirectoryInfo } from '../types/file';
 
+// 共享状态：使用模块级别的 ref，确保所有组件实例共享同一个状态
+const currentPath = ref<string>('');
+const directoryInfo = ref<DirectoryInfo | null>(null);
+const loading = ref(false);
+const error = ref<string | null>(null);
+
 export function useFileSystem() {
-  const currentPath = ref<string>('');
-  const directoryInfo = ref<DirectoryInfo | null>(null);
-  const loading = ref(false);
-  const error = ref<string | null>(null);
 
   /**
    * 加载目录内容
@@ -84,6 +86,21 @@ export function useFileSystem() {
   }
 
   /**
+   * 刷新当前目录
+   */
+  async function refresh() {
+    if (currentPath.value) {
+      // 如果当前是驱动盘列表，刷新驱动盘列表
+      if (directoryInfo.value?.path === 'drives:') {
+        await loadDrives();
+      } else {
+        // 否则刷新当前路径
+        await loadDirectory(currentPath.value);
+      }
+    }
+  }
+
+  /**
    * 初始化：加载用户主目录
    */
   async function initialize() {
@@ -108,6 +125,7 @@ export function useFileSystem() {
     goUp,
     initialize,
     loadDrives,
+    refresh,
   };
 }
 

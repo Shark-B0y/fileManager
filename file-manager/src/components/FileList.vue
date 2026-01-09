@@ -12,7 +12,9 @@
         v-for="item in items"
         :key="item.id"
         :item="item"
+        :is-selected="item.id === selectedItemId"
         @click="handleItemClick(item)"
+        @dblclick="handleItemDoubleClick(item)"
       />
     </div>
   </div>
@@ -24,14 +26,20 @@ import type { FileItem as FileItemType } from '../types/file';
 
 defineProps<{
   items: FileItemType[];
+  selectedItemId?: string | null;
 }>();
 
 const emit = defineEmits<{
   'item-click': [item: FileItemType];
+  'item-double-click': [item: FileItemType];
 }>();
 
 function handleItemClick(item: FileItemType) {
   emit('item-click', item);
+}
+
+function handleItemDoubleClick(item: FileItemType) {
+  emit('item-double-click', item);
 }
 </script>
 

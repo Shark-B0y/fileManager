@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import NavigationBar from './components/NavigationBar.vue';
 import MainContent from './components/MainContent.vue';
 </script>
 
 <template>
   <div class="file-manager-app">
+    <NavigationBar />
     <MainContent />
   </div>
 </template>
