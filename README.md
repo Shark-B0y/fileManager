@@ -201,7 +201,7 @@ npm install
 # 构建项目
 npm run tauri dev
 ```
-
+配置文件目录: fileManager\file-manager\src-tauri\config
 ## 📈 性能指标
 
 ### 基准测试（10万文件规模）

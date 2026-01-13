@@ -1,0 +1,11 @@
+# 全局配置文件
+# 应用启动时读取，在整个生命周期中可用
+
+# 用户主目录路径（可选）
+# 如果设置，get_home_directory 将优先使用此路径
+# 如果不设置或为空字符串，则使用系统默认的主目录
+# 示例：home_path = "C:\\Users\\CustomUser"
+home_path = "E:\\test"
+
+
+

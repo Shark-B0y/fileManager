@@ -6,6 +6,8 @@ use std::fs;
 use std::path::Path;
 
 use crate::models::file_system::{FileItem, DirectoryInfo};
+use tauri::State;
+use crate::config::GlobalConfigManager;
 
 /// 文件系统服务
 pub struct FileSystemService;
@@ -170,11 +172,18 @@ impl FileSystemService {
     /// # 返回
     /// - `Ok(String)`: 用户主目录路径
     /// - `Err(String)`: 错误信息
-    pub fn get_home_directory() -> Result<String, String> {
+    pub fn get_home_directory(global_config: State<'_, GlobalConfigManager>) -> Result<String, String> {
         // Windows 上使用环境变量
         #[cfg(windows)]
         {
             use std::env;
+                // 尝试从全局配置获取主目录路径
+            if let Some(home_path) = global_config.get_home_path() {
+                // 如果配置中的路径不为空，则使用配置的路径
+                if !home_path.is_empty() {
+                    return Ok(home_path);
+                }
+            }
             if let Ok(home) = env::var("USERPROFILE") {
                 return Ok(home);
             }

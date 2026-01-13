@@ -1,3 +1,4 @@
+mod config;
 mod database;
 mod commands;
 mod models;
@@ -6,6 +7,7 @@ mod system;
 
 use tauri::Manager;
 
+use crate::config::GlobalConfigManager;
 use crate::system::init::init_database;
 use crate::system::runtime::RuntimeManager;
 
@@ -14,6 +16,15 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // 加载全局配置（应用启动时读取）
+            // 优先从配置文件加载，失败则使用默认配置
+            let global_config = GlobalConfigManager::from_toml_file("config/global.toml")
+                .unwrap_or_else(|e| {
+                    eprintln!("从配置文件加载全局配置失败: {}, 使用默认配置", e);
+                    GlobalConfigManager::from_default()
+                });
+            app.manage(global_config);
+
             // 创建 Tokio 运行时管理器（与 Tauri 应用生命周期一致）
             // 优先从配置文件加载配置，失败则使用默认配置
             let runtime_manager = RuntimeManager::from_config_file("config/runtime.toml")

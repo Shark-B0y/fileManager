@@ -30,8 +30,10 @@
 //!
 //! ═══════════════════════════════════════════════════════════════════════════
 
+use crate::config::GlobalConfigManager;
 use crate::models::file_system::DirectoryInfo;
 use crate::services::FileSystemService;
+use tauri::State;
 
 /// 问候命令（示例命令）
 ///
@@ -63,13 +65,19 @@ pub async fn list_directory(path: String) -> Result<DirectoryInfo, String> {
 /// 获取用户主目录
 ///
 /// 获取当前用户的主目录路径
+/// 优先使用全局配置中的 home_path，如果未配置则使用系统默认路径
+///
+/// # 参数
+/// - `global_config`: 全局配置管理器状态
 ///
 /// # 返回
 /// - `Ok(String)`: 用户主目录路径
 /// - `Err(String)`: 错误信息
 #[tauri::command]
-pub async fn get_home_directory() -> Result<String, String> {
-    FileSystemService::get_home_directory()
+pub async fn get_home_directory(
+    global_config: State<'_, GlobalConfigManager>,
+) -> Result<String, String> {
+    FileSystemService::get_home_directory(global_config)
 }
 
 /// 获取所有驱动盘列表

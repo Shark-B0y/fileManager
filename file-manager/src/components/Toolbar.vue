@@ -115,13 +115,13 @@ async function handlePaste() {
       // 剪切：移动文件
       await invoke('cut_files', {
         paths: paths,
-        target_path: targetPath,
+        targetPath: targetPath,
       });
     } else if (operation === 'copy') {
       // 复制：复制文件
       await invoke('copy_files', {
         paths: paths,
-        target_path: targetPath,
+        targetPath: targetPath,
       });
     }
 
