@@ -41,7 +41,9 @@ pub fn run() {
             commands::list_directory,
             commands::get_home_directory,
             commands::list_drives,
-            commands::check_path_exists
+            commands::check_path_exists,
+            commands::cut_files,
+            commands::copy_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,12 +1,38 @@
 <script setup lang="ts">
+import { ref, computed } from 'vue';
 import NavigationBar from './components/NavigationBar.vue';
+import Toolbar from './components/Toolbar.vue';
 import MainContent from './components/MainContent.vue';
+
+const mainContentRef = ref<InstanceType<typeof MainContent> | null>(null);
+
+// 获取选中的文件项
+const selectedItems = computed(() => {
+  return mainContentRef.value?.selectedItems || [];
+});
+
+// 处理粘贴完成
+function handlePasteComplete() {
+  // 粘贴完成后可以执行一些操作，比如显示提示
+  console.log('粘贴完成');
+}
+
+// 处理错误
+function handleError(message: string) {
+  // 显示错误提示
+  alert(message);
+}
 </script>
 
 <template>
   <div class="file-manager-app">
     <NavigationBar />
-    <MainContent />
+    <Toolbar
+      :selected-items="selectedItems"
+      @paste-complete="handlePasteComplete"
+      @error="handleError"
+    />
+    <MainContent ref="mainContentRef" />
   </div>
 </template>
 

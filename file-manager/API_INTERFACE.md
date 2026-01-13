@@ -27,8 +27,10 @@
   - [2. get_home_directory - 获取用户主目录](#2-get_home_directory---获取用户主目录)
   - [3. list_drives - 获取驱动盘列表](#3-list_drives---获取驱动盘列表)
   - [4. check_path_exists - 检查路径是否存在](#4-check_path_exists---检查路径是否存在)
+  - [5. cut_files - 剪切文件](#5-cut_files---剪切文件)
+  - [6. copy_files - 复制文件](#6-copy_files---复制文件)
 - [示例命令](#示例命令)
-  - [5. greet - 问候命令](#5-greet---问候命令)
+  - [7. greet - 问候命令](#7-greet---问候命令)
 - [数据结构定义](#数据结构定义)
   - [FileItem - 文件项](#fileitem---文件项)
   - [DirectoryInfo - 目录信息](#directoryinfo---目录信息)
@@ -481,9 +483,204 @@ pub fn check_path_exists(path: &str) -> Result<bool, String> {
 
 ---
 
+### 5. cut_files - 剪切文件
+
+**功能描述**：将指定的文件/文件夹移动到目标目录（剪切操作）。
+
+**接口名称**：`cut_files`
+
+**调用方式**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+await invoke('cut_files', {
+  paths: ['C:\\Users\\Username\\file1.txt', 'C:\\Users\\Username\\folder1'],
+  targetPath: 'C:\\Users\\Username\\Documents'
+});
+```
+
+#### 请求参数
+
+**Rust 后端**：
+```rust
+#[tauri::command]
+pub async fn cut_files(paths: Vec<String>, target_path: String) -> Result<(), String>
+```
+
+**参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| `paths` | `Vec<String>` | 是 | 要剪切的文件/文件夹路径列表 |
+| `target_path` | `String` | 是 | 目标目录路径（Windows 路径格式） |
+
+**TypeScript 前端**：
+```typescript
+interface CutFilesRequest {
+  paths: string[];
+  target_path: string;
+}
+```
+
+#### 返回数据
+
+**成功返回**：无返回值（`void`）
+
+**错误返回**：`String` 错误信息
+
+**常见错误**：
+- `"目标路径不存在: {target_path}"` - 目标目录不存在
+- `"目标路径不是目录: {target_path}"` - 目标路径不是目录
+- `"源路径不存在: {path}"` - 源文件/文件夹不存在
+- `"目标路径已存在: {dest_path}"` - 目标位置已存在同名文件/文件夹
+- `"移动文件失败 {source} -> {dest}: {error}"` - 移动文件时发生错误
+
+#### 使用示例
+
+**前端调用**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+async function cutFiles(paths: string[], targetPath: string): Promise<void> {
+  try {
+    await invoke('cut_files', {
+      paths,
+      target_path: targetPath,
+    });
+    console.log('剪切成功');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('剪切失败:', errorMessage);
+    throw error;
+  }
+}
+
+// 使用示例
+await cutFiles(
+  ['C:\\Users\\Username\\file1.txt', 'C:\\Users\\Username\\folder1'],
+  'C:\\Users\\Username\\Documents'
+);
+```
+
+**后端实现** (`src-tauri/src/commands.rs`)：
+```rust
+#[tauri::command]
+pub async fn cut_files(paths: Vec<String>, target_path: String) -> Result<(), String> {
+    FileSystemService::cut_files(&paths, &target_path)
+}
+```
+
+#### 注意事项
+
+1. **移动操作**：剪切操作会移动文件/文件夹，原位置的文件将被删除
+2. **批量操作**：支持同时移动多个文件/文件夹
+3. **递归移动**：如果移动的是文件夹，会递归移动文件夹内的所有内容
+4. **目标冲突**：如果目标位置已存在同名文件/文件夹，操作会失败
+5. **权限要求**：需要对源路径和目标路径都有写入权限
+
+---
+
+### 6. copy_files - 复制文件
+
+**功能描述**：将指定的文件/文件夹复制到目标目录（复制操作）。
+
+**接口名称**：`copy_files`
+
+**调用方式**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+await invoke('copy_files', {
+  paths: ['C:\\Users\\Username\\file1.txt', 'C:\\Users\\Username\\folder1'],
+  targetPath: 'C:\\Users\\Username\\Documents'
+});
+```
+
+#### 请求参数
+
+**Rust 后端**：
+```rust
+#[tauri::command]
+pub async fn copy_files(paths: Vec<String>, target_path: String) -> Result<(), String>
+```
+
+**参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| `paths` | `Vec<String>` | 是 | 要复制的文件/文件夹路径列表 |
+| `target_path` | `String` | 是 | 目标目录路径（Windows 路径格式） |
+
+**TypeScript 前端**：
+```typescript
+interface CopyFilesRequest {
+  paths: string[];
+  target_path: string;
+}
+```
+
+#### 返回数据
+
+**成功返回**：无返回值（`void`）
+
+**错误返回**：`String` 错误信息
+
+**常见错误**：
+- `"目标路径不存在: {target_path}"` - 目标目录不存在
+- `"目标路径不是目录: {target_path}"` - 目标路径不是目录
+- `"源路径不存在: {path}"` - 源文件/文件夹不存在
+- `"目标路径已存在: {dest_path}"` - 目标位置已存在同名文件/文件夹
+- `"复制文件失败 {source} -> {dest}: {error}"` - 复制文件时发生错误
+
+#### 使用示例
+
+**前端调用**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+async function copyFiles(paths: string[], targetPath: string): Promise<void> {
+  try {
+    await invoke('copy_files', {
+      paths,
+      target_path: targetPath,
+    });
+    console.log('复制成功');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('复制失败:', errorMessage);
+    throw error;
+  }
+}
+
+// 使用示例
+await copyFiles(
+  ['C:\\Users\\Username\\file1.txt', 'C:\\Users\\Username\\folder1'],
+  'C:\\Users\\Username\\Documents'
+);
+```
+
+**后端实现** (`src-tauri/src/commands.rs`)：
+```rust
+#[tauri::command]
+pub async fn copy_files(paths: Vec<String>, target_path: String) -> Result<(), String> {
+    FileSystemService::copy_files(&paths, &target_path)
+}
+```
+
+#### 注意事项
+
+1. **复制操作**：复制操作不会删除源文件/文件夹，原位置的文件保持不变
+2. **批量操作**：支持同时复制多个文件/文件夹
+3. **递归复制**：如果复制的是文件夹，会递归复制文件夹内的所有内容
+4. **目标冲突**：如果目标位置已存在同名文件/文件夹，操作会失败
+5. **权限要求**：需要对源路径有读取权限，对目标路径有写入权限
+6. **隐藏文件**：复制文件夹时，会跳过隐藏文件（以 `.` 开头的文件）
+
+---
+
 ## 示例命令
 
-### 5. greet - 问候命令
+### 7. greet - 问候命令
 
 **功能描述**：示例命令，用于测试前后端通信是否正常。
 
@@ -702,13 +899,15 @@ export interface DirectoryInfo {
 所有接口需要在 `src-tauri/src/lib.rs` 中注册：
 
 ```rust
-.invoke_handler(tauri::generate_handler![
-    commands::greet,
-    commands::list_directory,
-    commands::get_home_directory,
-    commands::list_drives,
-    commands::check_path_exists
-])
+        .invoke_handler(tauri::generate_handler![
+            commands::greet,
+            commands::list_directory,
+            commands::get_home_directory,
+            commands::list_drives,
+            commands::check_path_exists,
+            commands::cut_files,
+            commands::copy_files
+        ])
 ```
 
 ---
@@ -766,6 +965,11 @@ export interface DirectoryInfo {
 
 ## 📅 版本记录
 
+### v1.3.0 (2025-12-XX)
+- 添加 `cut_files` 接口，支持剪切文件/文件夹
+- 添加 `copy_files` 接口，支持复制文件/文件夹
+- 工具栏组件支持剪切、复制、粘贴功能
+
 ### v1.2.0 (2025-12-XX)
 - 添加 `check_path_exists` 接口，支持检查路径是否存在且为目录
 - 导航栏路径显示改为可编辑输入框，支持直接输入路径跳转
@@ -788,5 +992,5 @@ export interface DirectoryInfo {
 
 **文档维护者**：开发团队
 **最后更新**：2025-12-XX
-**文档版本**：v1.2.0
+**文档版本**：v1.3.0
 

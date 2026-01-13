@@ -96,6 +96,7 @@
 - **哈希算法**：SHA-256（ring库） + 增量指纹
 - **ORM**：Diesel 或 SeaORM
 
+icon web: www.iconfont.cn
 ### 系统架构
 ```
 应用程序层 (Tauri + Web前端)

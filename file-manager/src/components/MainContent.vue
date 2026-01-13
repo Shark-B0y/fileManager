@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useFileSystem } from '../composables/useFileSystem';
 import FileList from './FileList.vue';
 import type { FileItem } from '../types/file';
@@ -122,6 +122,23 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('file-search', handleSearchEvent as EventListener);
+});
+
+// 计算选中的文件项
+const selectedItems = computed(() => {
+  if (!directoryInfo.value) return [];
+  return directoryInfo.value.items.filter(item => selectedItemIds.value.has(item.id));
+});
+
+// 暴露方法和数据给父组件
+defineExpose({
+  scrollToItem: (itemId: string) => {
+    if (fileListRef.value) {
+      fileListRef.value.scrollToItem(itemId);
+    }
+  },
+  selectedItemIds,
+  selectedItems,
 });
 
 // 初始化

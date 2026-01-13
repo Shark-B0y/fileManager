@@ -99,3 +99,35 @@ pub async fn list_drives() -> Result<DirectoryInfo, String> {
 pub async fn check_path_exists(path: String) -> Result<bool, String> {
     FileSystemService::check_path_exists(&path)
 }
+
+/// 剪切文件（移动文件）
+///
+/// 将指定的文件/文件夹移动到目标目录
+///
+/// # 参数
+/// - `paths`: 要剪切的文件/文件夹路径列表
+/// - `target_path`: 目标目录路径
+///
+/// # 返回
+/// - `Ok(())`: 操作成功
+/// - `Err(String)`: 错误信息
+#[tauri::command]
+pub async fn cut_files(paths: Vec<String>, target_path: String) -> Result<(), String> {
+    FileSystemService::cut_files(&paths, &target_path)
+}
+
+/// 复制文件
+///
+/// 将指定的文件/文件夹复制到目标目录
+///
+/// # 参数
+/// - `paths`: 要复制的文件/文件夹路径列表
+/// - `target_path`: 目标目录路径
+///
+/// # 返回
+/// - `Ok(())`: 操作成功
+/// - `Err(String)`: 错误信息
+#[tauri::command]
+pub async fn copy_files(paths: Vec<String>, target_path: String) -> Result<(), String> {
+    FileSystemService::copy_files(&paths, &target_path)
+}

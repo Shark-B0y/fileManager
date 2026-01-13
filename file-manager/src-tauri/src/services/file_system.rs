@@ -318,6 +318,158 @@ impl FileSystemService {
         Ok(true)
     }
 
+    /// 剪切文件（移动文件）
+    ///
+    /// # 参数
+    /// - `paths`: 要剪切的文件/文件夹路径列表
+    /// - `target_path`: 目标目录路径
+    ///
+    /// # 返回
+    /// - `Ok(())`: 操作成功
+    /// - `Err(String)`: 错误信息
+    pub fn cut_files(paths: &[String], target_path: &str) -> Result<(), String> {
+        let target_dir = Path::new(target_path);
+
+        // 检查目标路径是否存在且为目录
+        if !target_dir.exists() {
+            return Err(format!("目标路径不存在: {}", target_path));
+        }
+
+        if !target_dir.is_dir() {
+            return Err(format!("目标路径不是目录: {}", target_path));
+        }
+
+        // 移动每个文件/文件夹
+        for path in paths {
+            let source_path = Path::new(path);
+
+            if !source_path.exists() {
+                return Err(format!("源路径不存在: {}", path));
+            }
+
+            // 获取文件名
+            let file_name = source_path.file_name()
+                .and_then(|n| n.to_str())
+                .ok_or_else(|| format!("无法获取文件名: {}", path))?;
+
+            // 构建目标路径
+            let dest_path = target_dir.join(file_name);
+
+            // 如果目标路径已存在，返回错误
+            if dest_path.exists() {
+                return Err(format!("目标路径已存在: {}", dest_path.display()));
+            }
+
+            // 移动文件/文件夹
+            fs::rename(source_path, &dest_path)
+                .map_err(|e| format!("移动文件失败 {} -> {}: {}", path, dest_path.display(), e))?;
+        }
+
+        Ok(())
+    }
+
+    /// 复制文件
+    ///
+    /// # 参数
+    /// - `paths`: 要复制的文件/文件夹路径列表
+    /// - `target_path`: 目标目录路径
+    ///
+    /// # 返回
+    /// - `Ok(())`: 操作成功
+    /// - `Err(String)`: 错误信息
+    pub fn copy_files(paths: &[String], target_path: &str) -> Result<(), String> {
+        let target_dir = Path::new(target_path);
+
+        // 检查目标路径是否存在且为目录
+        if !target_dir.exists() {
+            return Err(format!("目标路径不存在: {}", target_path));
+        }
+
+        if !target_dir.is_dir() {
+            return Err(format!("目标路径不是目录: {}", target_path));
+        }
+
+        // 复制每个文件/文件夹
+        for path in paths {
+            let source_path = Path::new(path);
+
+            if !source_path.exists() {
+                return Err(format!("源路径不存在: {}", path));
+            }
+
+            // 获取文件名
+            let file_name = source_path.file_name()
+                .and_then(|n| n.to_str())
+                .ok_or_else(|| format!("无法获取文件名: {}", path))?;
+
+            // 构建目标路径
+            let dest_path = target_dir.join(file_name);
+
+            // 如果目标路径已存在，返回错误
+            if dest_path.exists() {
+                return Err(format!("目标路径已存在: {}", dest_path.display()));
+            }
+
+            // 复制文件/文件夹
+            if source_path.is_dir() {
+                // 递归复制目录
+                Self::copy_directory(source_path, &dest_path)?;
+            } else {
+                // 复制文件
+                fs::copy(source_path, &dest_path)
+                    .map_err(|e| format!("复制文件失败 {} -> {}: {}", path, dest_path.display(), e))?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 递归复制目录
+    ///
+    /// # 参数
+    /// - `source`: 源目录路径
+    /// - `dest`: 目标目录路径
+    ///
+    /// # 返回
+    /// - `Ok(())`: 操作成功
+    /// - `Err(String)`: 错误信息
+    fn copy_directory(source: &Path, dest: &Path) -> Result<(), String> {
+        // 创建目标目录
+        fs::create_dir_all(dest)
+            .map_err(|e| format!("创建目标目录失败 {}: {}", dest.display(), e))?;
+
+        // 读取源目录内容
+        let entries = fs::read_dir(source)
+            .map_err(|e| format!("读取目录失败 {}: {}", source.display(), e))?;
+
+        // 复制每个条目
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("读取目录项失败: {}", e))?;
+            let entry_path = entry.path();
+            let entry_name = entry_path.file_name()
+                .and_then(|n| n.to_str())
+                .ok_or_else(|| format!("无法获取文件名: {}", entry_path.display()))?;
+
+            // 跳过隐藏文件
+            if entry_name.starts_with('.') {
+                continue;
+            }
+
+            let dest_entry_path = dest.join(entry_name);
+
+            if entry_path.is_dir() {
+                // 递归复制子目录
+                Self::copy_directory(&entry_path, &dest_entry_path)?;
+            } else {
+                // 复制文件
+                fs::copy(&entry_path, &dest_entry_path)
+                    .map_err(|e| format!("复制文件失败 {} -> {}: {}", entry_path.display(), dest_entry_path.display(), e))?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// 格式化时间为 ISO 8601 格式
     ///
     /// # 参数
