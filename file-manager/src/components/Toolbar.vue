@@ -1,41 +1,81 @@
 <template>
   <div class="toolbar">
-    <div class="toolbar-group">
-      <button
-        class="toolbar-button"
-        :class="{ disabled: !canCutOrCopy }"
-        :disabled="!canCutOrCopy"
-        @click="handleCut"
-        @mouseenter="hoveredButton = 'cut'"
-        @mouseleave="hoveredButton = null"
-      >
-        <img src="../assets/icon/cut.svg" alt="剪切" class="icon" />
-        <span v-if="hoveredButton === 'cut'" class="tooltip">剪切</span>
-      </button>
+    <div class="toolbar-row">
+      <div class="toolbar-group">
+        <button
+          class="toolbar-button"
+          :class="{ disabled: !canCutOrCopy }"
+          :disabled="!canCutOrCopy"
+          @click="handleCut"
+          @mouseenter="hoveredButton = 'cut'"
+          @mouseleave="hoveredButton = null"
+        >
+          <img src="../assets/icon/cut.svg" alt="剪切" class="icon" />
+          <span v-if="hoveredButton === 'cut'" class="tooltip">剪切</span>
+        </button>
 
-      <button
-        class="toolbar-button"
-        :class="{ disabled: !canCutOrCopy }"
-        :disabled="!canCutOrCopy"
-        @click="handleCopy"
-        @mouseenter="hoveredButton = 'copy'"
-        @mouseleave="hoveredButton = null"
-      >
-        <img src="../assets/icon/copy.svg" alt="复制" class="icon" />
-        <span v-if="hoveredButton === 'copy'" class="tooltip">复制</span>
-      </button>
+        <button
+          class="toolbar-button"
+          :class="{ disabled: !canCutOrCopy }"
+          :disabled="!canCutOrCopy"
+          @click="handleCopy"
+          @mouseenter="hoveredButton = 'copy'"
+          @mouseleave="hoveredButton = null"
+        >
+          <img src="../assets/icon/copy.svg" alt="复制" class="icon" />
+          <span v-if="hoveredButton === 'copy'" class="tooltip">复制</span>
+        </button>
 
-      <button
-        class="toolbar-button"
-        :class="{ disabled: !canPaste }"
-        :disabled="!canPaste"
-        @click="handlePaste"
-        @mouseenter="hoveredButton = 'paste'"
-        @mouseleave="hoveredButton = null"
-      >
-        <img src="../assets/icon/paste.svg" alt="粘贴" class="icon" />
-        <span v-if="hoveredButton === 'paste'" class="tooltip">粘贴</span>
-      </button>
+        <button
+          class="toolbar-button"
+          :class="{ disabled: !canPaste }"
+          :disabled="!canPaste"
+          @click="handlePaste"
+          @mouseenter="hoveredButton = 'paste'"
+          @mouseleave="hoveredButton = null"
+        >
+          <img src="../assets/icon/paste.svg" alt="粘贴" class="icon" />
+          <span v-if="hoveredButton === 'paste'" class="tooltip">粘贴</span>
+        </button>
+      </div>
+
+      <div class="toolbar-group toolbar-group-right">
+        <button
+          class="toolbar-button tag-button"
+          :class="{ active: isTagPanelExpanded }"
+          @click="toggleTagPanel"
+          @mouseenter="hoveredButton = 'tag'"
+          @mouseleave="hoveredButton = null"
+        >
+          <img src="../assets/icon/tag.svg" alt="标签" class="icon" :class="{ active: isTagPanelExpanded }" />
+          <span v-if="hoveredButton === 'tag'" class="tooltip">标签</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 标签面板展开区域 -->
+    <div v-if="isTagPanelExpanded" class="tag-panel">
+      <div class="tag-panel-row">
+        <div class="tag-list">
+          <div
+            v-for="tag in mostUsedTags"
+            :key="tag.id"
+            class="tag-item"
+            :style="{ backgroundColor: tag.color || '#3B82F6' }"
+          >
+            {{ tag.name }}
+          </div>
+          <div v-if="mostUsedTags.length === 0 && !loadingTags" class="tag-empty">
+            暂无标签
+          </div>
+          <div v-if="loadingTags" class="tag-loading">
+            加载中...
+          </div>
+        </div>
+      </div>
+      <div class="tag-panel-row">
+        <!-- 第二行可以用于其他标签功能 -->
+      </div>
     </div>
   </div>
 </template>
@@ -46,6 +86,17 @@ import { invoke } from '@tauri-apps/api/core';
 import { useClipboard } from '../composables/useClipboard';
 import { useFileSystem } from '../composables/useFileSystem';
 import type { FileItem } from '../types/file';
+
+// 标签类型定义
+interface Tag {
+  id: number;
+  name: string;
+  color: string | null;
+  parent_id: number | null;
+  usage_count: number;
+  created_at: string;
+  updated_at: string;
+}
 
 const props = defineProps<{
   selectedItems: FileItem[];
@@ -59,7 +110,10 @@ const emit = defineEmits<{
 const { clipboardData, setCut, setCopy, hasData, clear } = useClipboard();
 const { currentPath, refresh } = useFileSystem();
 
-const hoveredButton = ref<'cut' | 'copy' | 'paste' | null>(null);
+const hoveredButton = ref<'cut' | 'copy' | 'paste' | 'tag' | null>(null);
+const isTagPanelExpanded = ref(false);
+const mostUsedTags = ref<Tag[]>([]);
+const loadingTags = ref(false);
 
 // 是否可以剪切或复制（有选中项时可用）
 const canCutOrCopy = computed(() => {
@@ -139,15 +193,45 @@ async function handlePaste() {
     emit('error', `粘贴失败: ${message}`);
   }
 }
+
+// 切换标签面板
+async function toggleTagPanel() {
+  isTagPanelExpanded.value = !isTagPanelExpanded.value;
+
+  // 如果展开且标签列表为空，则加载标签
+  if (isTagPanelExpanded.value && mostUsedTags.value.length === 0) {
+    await loadMostUsedTags();
+  }
+}
+
+// 加载最常用的标签
+async function loadMostUsedTags() {
+  loadingTags.value = true;
+  try {
+    const tags = await invoke<Tag[]>('get_most_used_tags', { limit: 10 });
+    mostUsedTags.value = tags;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emit('error', `加载标签失败: ${message}`);
+  } finally {
+    loadingTags.value = false;
+  }
+}
 </script>
 
 <style scoped>
 .toolbar {
   display: flex;
-  align-items: center;
-  padding: 8px 16px;
+  flex-direction: column;
   background-color: #f5f5f5;
   border-bottom: 1px solid #e0e0e0;
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
   gap: 8px;
 }
 
@@ -155,6 +239,20 @@ async function handlePaste() {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.toolbar-group-right {
+  margin-left: auto;
+}
+
+.tag-button.active .icon {
+  filter: brightness(0.7);
+  opacity: 1;
+}
+
+.tag-button .icon.active {
+  filter: brightness(0.7);
+  opacity: 1;
 }
 
 .toolbar-button {
@@ -211,6 +309,47 @@ async function handlePaste() {
   transform: translateX(-50%);
   border: 4px solid transparent;
   border-top-color: #333;
+}
+
+.tag-panel {
+  padding: 8px 16px;
+  background-color: #ffffff;
+  border-top: 1px solid #e0e0e0;
+}
+
+.tag-panel-row {
+  margin-bottom: 8px;
+}
+
+.tag-panel-row:last-child {
+  margin-bottom: 0;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.tag-item {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.tag-item:hover {
+  opacity: 0.8;
+}
+
+.tag-empty,
+.tag-loading {
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #999;
 }
 </style>
 

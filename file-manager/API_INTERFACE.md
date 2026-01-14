@@ -29,11 +29,14 @@
   - [4. check_path_exists - 检查路径是否存在](#4-check_path_exists---检查路径是否存在)
   - [5. cut_files - 剪切文件](#5-cut_files---剪切文件)
   - [6. copy_files - 复制文件](#6-copy_files---复制文件)
+- [标签管理接口](#标签管理接口)
+  - [7. get_most_used_tags - 获取使用数量最多的标签](#7-get_most_used_tags---获取使用数量最多的标签)
 - [示例命令](#示例命令)
-  - [7. greet - 问候命令](#7-greet---问候命令)
+  - [8. greet - 问候命令](#8-greet---问候命令)
 - [数据结构定义](#数据结构定义)
   - [FileItem - 文件项](#fileitem---文件项)
   - [DirectoryInfo - 目录信息](#directoryinfo---目录信息)
+  - [Tag - 标签](#tag---标签)
 
 ---
 
@@ -678,9 +681,147 @@ pub async fn copy_files(paths: Vec<String>, target_path: String) -> Result<(), S
 
 ---
 
+## 标签管理接口
+
+### 7. get_most_used_tags - 获取使用数量最多的标签
+
+**功能描述**：获取使用次数最多的标签列表，按使用次数降序排列。用于在工具栏标签面板中显示最常用的标签。
+
+**接口名称**：`get_most_used_tags`
+
+**调用方式**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+const tags = await invoke<Tag[]>('get_most_used_tags', {
+  limit: 10
+});
+```
+
+#### 请求参数
+
+**Rust 后端**：
+```rust
+#[tauri::command]
+pub async fn get_most_used_tags(
+    db: State<'_, GlobalDatabase>,
+    limit: Option<i32>,
+) -> Result<Vec<Tag>, String>
+```
+
+**参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| `limit` | `Option<i32>` | 否 | 返回的标签数量限制，默认为 10 |
+
+**TypeScript 前端**：
+```typescript
+interface GetMostUsedTagsRequest {
+  limit?: number;
+}
+```
+
+#### 返回数据
+
+**成功返回**：`Tag[]` 标签数组，按使用次数降序排列
+
+**错误返回**：`String` 错误信息
+
+**常见错误**：
+- `"获取数据库连接失败: {error}"` - 无法获取数据库连接
+- `"查询标签失败: {error}"` - 数据库查询失败
+
+#### 数据结构
+
+**Rust 后端** (`src-tauri/src/models/tag.rs`)：
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Tag {
+    /// 标签ID
+    pub id: i32,
+    /// 标签名称
+    pub name: String,
+    /// 标签颜色（HEX颜色代码，如#FF0000）
+    pub color: Option<String>,
+    /// 父标签ID（用于层级标签）
+    pub parent_id: Option<i32>,
+    /// 使用次数统计
+    pub usage_count: i32,
+    /// 创建时间
+    pub created_at: String,
+    /// 更新时间
+    pub updated_at: String,
+}
+```
+
+**TypeScript 前端**：
+```typescript
+export interface Tag {
+  /** 标签ID */
+  id: number;
+  /** 标签名称 */
+  name: string;
+  /** 标签颜色（HEX颜色代码，如#FF0000） */
+  color: string | null;
+  /** 父标签ID（用于层级标签） */
+  parent_id: number | null;
+  /** 使用次数统计 */
+  usage_count: number;
+  /** 创建时间 */
+  created_at: string;
+  /** 更新时间 */
+  updated_at: string;
+}
+```
+
+#### 使用示例
+
+**前端调用**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+import type { Tag } from '../types/tag';
+
+async function loadMostUsedTags(limit: number = 10): Promise<Tag[]> {
+  try {
+    const tags = await invoke<Tag[]>('get_most_used_tags', { limit });
+    return tags;
+  } catch (error) {
+    console.error('加载标签失败:', error);
+    throw error;
+  }
+}
+
+// 使用示例
+const tags = await loadMostUsedTags(10);
+tags.forEach(tag => {
+  console.log(`${tag.name}: ${tag.usage_count} 次使用`);
+});
+```
+
+**后端实现** (`src-tauri/src/commands.rs`)：
+```rust
+#[tauri::command]
+pub async fn get_most_used_tags(
+    db: State<'_, GlobalDatabase>,
+    limit: Option<i32>,
+) -> Result<Vec<crate::models::tag::Tag>, String> {
+    TagService::get_most_used_tags(&*db, limit).await
+}
+```
+
+#### 注意事项
+
+1. **排序规则**：标签按 `usage_count` 降序排列，如果使用次数相同，则按 `id` 升序排列
+2. **软删除**：只返回未删除的标签（`deleted_at IS NULL`）
+3. **默认限制**：如果不指定 `limit`，默认返回 10 个标签
+4. **时间格式**：`created_at` 和 `updated_at` 使用 ISO 8601 格式字符串
+
+---
+
 ## 示例命令
 
-### 7. greet - 问候命令
+### 8. greet - 问候命令
 
 **功能描述**：示例命令，用于测试前后端通信是否正常。
 
@@ -963,7 +1104,86 @@ export interface DirectoryInfo {
 
 ---
 
+## 数据结构定义
+
+### Tag - 标签
+
+**用途**：表示一个标签的信息。
+
+#### Rust 后端定义
+
+**位置**：`src-tauri/src/models/tag.rs`
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Tag {
+    /// 标签ID
+    pub id: i32,
+    /// 标签名称
+    pub name: String,
+    /// 标签颜色（HEX颜色代码，如#FF0000）
+    pub color: Option<String>,
+    /// 父标签ID（用于层级标签）
+    pub parent_id: Option<i32>,
+    /// 使用次数统计
+    pub usage_count: i32,
+    /// 创建时间
+    pub created_at: String,
+    /// 更新时间
+    pub updated_at: String,
+}
+```
+
+#### TypeScript 前端定义
+
+**位置**：`src/types/tag.ts`（需要创建）
+
+```typescript
+export interface Tag {
+  /** 标签ID */
+  id: number;
+  /** 标签名称 */
+  name: string;
+  /** 标签颜色（HEX颜色代码，如#FF0000） */
+  color: string | null;
+  /** 父标签ID（用于层级标签） */
+  parent_id: number | null;
+  /** 使用次数统计 */
+  usage_count: number;
+  /** 创建时间 */
+  created_at: string;
+  /** 更新时间 */
+  updated_at: string;
+}
+```
+
+#### 字段说明
+
+| 字段名 | Rust 类型 | TypeScript 类型 | 必填 | 说明 |
+|--------|-----------|-----------------|------|------|
+| `id` | `i32` | `number` | 是 | 标签唯一标识符 |
+| `name` | `String` | `string` | 是 | 标签名称 |
+| `color` | `Option<String>` | `string \| null` | 否 | 标签颜色，HEX格式（如 `#FF0000`） |
+| `parent_id` | `Option<i32>` | `number \| null` | 否 | 父标签ID，用于层级标签结构 |
+| `usage_count` | `i32` | `number` | 是 | 标签使用次数统计 |
+| `created_at` | `String` | `string` | 是 | 创建时间，ISO 8601 格式 |
+| `updated_at` | `String` | `string` | 是 | 更新时间，ISO 8601 格式 |
+
+#### 注意事项
+
+1. **颜色格式**：`color` 字段使用 HEX 颜色代码格式（如 `#FF0000`），如果未设置则为 `null`
+2. **层级标签**：通过 `parent_id` 字段支持层级标签结构，根标签的 `parent_id` 为 `null`
+3. **使用统计**：`usage_count` 字段记录标签被使用的次数，用于排序和推荐
+4. **时间格式**：`created_at` 和 `updated_at` 使用 ISO 8601 格式字符串
+
+---
+
 ## 📅 版本记录
+
+### v1.4.0 (2025-12-XX)
+- 添加 `get_most_used_tags` 接口，支持获取使用数量最多的标签
+- 工具栏添加标签图标和展开/收起功能
+- 添加 `Tag` 数据结构定义
 
 ### v1.3.0 (2025-12-XX)
 - 添加 `cut_files` 接口，支持剪切文件/文件夹
@@ -992,5 +1212,5 @@ export interface DirectoryInfo {
 
 **文档维护者**：开发团队
 **最后更新**：2025-12-XX
-**文档版本**：v1.3.0
+**文档版本**：v1.4.0
 

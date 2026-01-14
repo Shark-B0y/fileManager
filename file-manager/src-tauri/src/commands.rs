@@ -31,8 +31,9 @@
 //! ═══════════════════════════════════════════════════════════════════════════
 
 use crate::config::GlobalConfigManager;
+use crate::database::GlobalDatabase;
 use crate::models::file_system::DirectoryInfo;
-use crate::services::FileSystemService;
+use crate::services::{FileSystemService, TagService};
 use tauri::State;
 
 /// 问候命令（示例命令）
@@ -138,4 +139,23 @@ pub async fn cut_files(paths: Vec<String>, target_path: String) -> Result<(), St
 #[tauri::command]
 pub async fn copy_files(paths: Vec<String>, target_path: String) -> Result<(), String> {
     FileSystemService::copy_files(&paths, &target_path)
+}
+
+/// 获取使用数量最多的标签
+///
+/// 获取使用次数最多的标签列表，按使用次数降序排列
+///
+/// # 参数
+/// - `db`: 全局数据库实例
+/// - `limit`: 返回的标签数量限制，默认为 10
+///
+/// # 返回
+/// - `Ok(Vec<Tag>)`: 标签列表，按使用次数降序排列
+/// - `Err(String)`: 错误信息
+#[tauri::command]
+pub async fn get_most_used_tags(
+    db: State<'_, GlobalDatabase>,
+    limit: Option<i32>,
+) -> Result<Vec<crate::models::tag::Tag>, String> {
+    TagService::get_most_used_tags(&*db, limit).await
 }

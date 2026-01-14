@@ -3,7 +3,9 @@
 //! 包含所有业务逻辑的实现
 
 pub mod file_system;
+pub mod tag;
 
 pub use file_system::FileSystemService;
+pub use tag::TagService;
 
 

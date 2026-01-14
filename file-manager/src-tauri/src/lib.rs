@@ -54,7 +54,8 @@ pub fn run() {
             commands::list_drives,
             commands::check_path_exists,
             commands::cut_files,
-            commands::copy_files
+            commands::copy_files,
+            commands::get_most_used_tags
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
