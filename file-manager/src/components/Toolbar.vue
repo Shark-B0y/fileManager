@@ -86,17 +86,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useClipboard } from '../composables/useClipboard';
 import { useFileSystem } from '../composables/useFileSystem';
 import type { FileItem } from '../types/file';
-
-// 标签类型定义
-interface Tag {
-  id: number;
-  name: string;
-  color: string | null;
-  parent_id: number | null;
-  usage_count: number;
-  created_at: string;
-  updated_at: string;
-}
+import type { Tag } from '../types/tag';
 
 const props = defineProps<{
   selectedItems: FileItem[];
