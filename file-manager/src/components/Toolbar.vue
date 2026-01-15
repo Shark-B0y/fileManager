@@ -61,7 +61,10 @@
             v-for="tag in mostUsedTags"
             :key="tag.id"
             class="tag-item"
-            :style="{ backgroundColor: tag.color || '#3B82F6' }"
+            :style="{
+              backgroundColor: tag.color || '#FFFF00',
+              color: tag.font_color || '#000000'
+            }"
           >
             {{ tag.name }}
           </div>

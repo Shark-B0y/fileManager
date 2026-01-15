@@ -742,8 +742,10 @@ pub struct Tag {
     pub id: i32,
     /// 标签名称
     pub name: String,
-    /// 标签颜色（HEX颜色代码，如#FF0000）
+    /// 标签背景颜色（HEX颜色代码，如#FFFF00）
     pub color: Option<String>,
+    /// 标签字体颜色（HEX颜色代码，如#000000）
+    pub font_color: Option<String>,
     /// 父标签ID（用于层级标签）
     pub parent_id: Option<i32>,
     /// 使用次数统计
@@ -762,8 +764,10 @@ export interface Tag {
   id: number;
   /** 标签名称 */
   name: string;
-  /** 标签颜色（HEX颜色代码，如#FF0000） */
+  /** 标签背景颜色（HEX颜色代码，如#FFFF00） */
   color: string | null;
+  /** 标签字体颜色（HEX颜色代码，如#000000） */
+  font_color: string | null;
   /** 父标签ID（用于层级标签） */
   parent_id: number | null;
   /** 使用次数统计 */
@@ -1121,8 +1125,10 @@ pub struct Tag {
     pub id: i32,
     /// 标签名称
     pub name: String,
-    /// 标签颜色（HEX颜色代码，如#FF0000）
+    /// 标签背景颜色（HEX颜色代码，如#FFFF00）
     pub color: Option<String>,
+    /// 标签字体颜色（HEX颜色代码，如#000000）
+    pub font_color: Option<String>,
     /// 父标签ID（用于层级标签）
     pub parent_id: Option<i32>,
     /// 使用次数统计
@@ -1136,7 +1142,7 @@ pub struct Tag {
 
 #### TypeScript 前端定义
 
-**位置**：`src/types/tag.ts`（需要创建）
+**位置**：`src/types/tag.ts`
 
 ```typescript
 export interface Tag {
@@ -1144,8 +1150,10 @@ export interface Tag {
   id: number;
   /** 标签名称 */
   name: string;
-  /** 标签颜色（HEX颜色代码，如#FF0000） */
+  /** 标签背景颜色（HEX颜色代码，如#FFFF00） */
   color: string | null;
+  /** 标签字体颜色（HEX颜色代码，如#000000） */
+  font_color: string | null;
   /** 父标签ID（用于层级标签） */
   parent_id: number | null;
   /** 使用次数统计 */
@@ -1163,7 +1171,8 @@ export interface Tag {
 |--------|-----------|-----------------|------|------|
 | `id` | `i32` | `number` | 是 | 标签唯一标识符 |
 | `name` | `String` | `string` | 是 | 标签名称 |
-| `color` | `Option<String>` | `string \| null` | 否 | 标签颜色，HEX格式（如 `#FF0000`） |
+| `color` | `Option<String>` | `string \| null` | 否 | 标签背景颜色，HEX格式（如 `#FFFF00`），默认值为 `#FFFF00` |
+| `font_color` | `Option<String>` | `string \| null` | 否 | 标签字体颜色，HEX格式（如 `#000000`），默认值为 `#000000` |
 | `parent_id` | `Option<i32>` | `number \| null` | 否 | 父标签ID，用于层级标签结构 |
 | `usage_count` | `i32` | `number` | 是 | 标签使用次数统计 |
 | `created_at` | `String` | `string` | 是 | 创建时间，ISO 8601 格式 |
@@ -1171,7 +1180,10 @@ export interface Tag {
 
 #### 注意事项
 
-1. **颜色格式**：`color` 字段使用 HEX 颜色代码格式（如 `#FF0000`），如果未设置则为 `null`
+1. **颜色格式**：
+   - `color` 字段用于标签背景颜色，使用 HEX 颜色代码格式（如 `#FFFF00`），默认值为 `#FFFF00`（黄色）
+   - `font_color` 字段用于标签字体颜色，使用 HEX 颜色代码格式（如 `#000000`），默认值为 `#000000`（黑色）
+   - 如果未设置则为 `null`，前端应使用默认值
 2. **层级标签**：通过 `parent_id` 字段支持层级标签结构，根标签的 `parent_id` 为 `null`
 3. **使用统计**：`usage_count` 字段记录标签被使用的次数，用于排序和推荐
 4. **时间格式**：`created_at` 和 `updated_at` 使用 ISO 8601 格式字符串

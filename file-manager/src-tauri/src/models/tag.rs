@@ -11,8 +11,10 @@ pub struct Tag {
     pub id: i32,
     /// 标签名称
     pub name: String,
-    /// 标签颜色（HEX颜色代码，如#FF0000）
+    /// 标签背景颜色（HEX颜色代码，如#FFFF00）
     pub color: Option<String>,
+    /// 标签字体颜色（HEX颜色代码，如#000000）
+    pub font_color: Option<String>,
     /// 父标签ID（用于层级标签）
     pub parent_id: Option<i32>,
     /// 使用次数统计

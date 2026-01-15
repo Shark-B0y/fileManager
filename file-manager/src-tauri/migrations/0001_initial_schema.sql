@@ -25,7 +25,8 @@ CREATE INDEX IF NOT EXISTS idx_files_file_type ON files(file_type);
 CREATE TABLE IF NOT EXISTS tags (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    color VARCHAR(7), -- HEX颜色代码，如#FF0000
+    color VARCHAR(7) DEFAULT '#FFFF00', -- HEX颜色代码，如#FFFF00（背景颜色）
+    font_color VARCHAR(7) DEFAULT '#000000', -- HEX颜色代码，如#000000（字体颜色）
     parent_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
     usage_count INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

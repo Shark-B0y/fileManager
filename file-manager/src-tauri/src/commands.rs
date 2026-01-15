@@ -34,6 +34,7 @@ use crate::config::GlobalConfigManager;
 use crate::database::GlobalDatabase;
 use crate::models::file_system::DirectoryInfo;
 use crate::services::{FileSystemService, TagService};
+use crate::models::tag::Tag;
 use tauri::State;
 
 /// 问候命令（示例命令）
@@ -156,6 +157,6 @@ pub async fn copy_files(paths: Vec<String>, target_path: String) -> Result<(), S
 pub async fn get_most_used_tags(
     db: State<'_, GlobalDatabase>,
     limit: Option<i32>,
-) -> Result<Vec<crate::models::tag::Tag>, String> {
+) -> Result<Vec<Tag>, String> {
     TagService::get_most_used_tags(&*db, limit).await
 }
