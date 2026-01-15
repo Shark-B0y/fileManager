@@ -142,21 +142,25 @@ pub async fn copy_files(paths: Vec<String>, target_path: String) -> Result<(), S
     FileSystemService::copy_files(&paths, &target_path)
 }
 
-/// 获取使用数量最多的标签
+/// 获取标签列表
 ///
-/// 获取使用次数最多的标签列表，按使用次数降序排列
+/// 根据指定模式获取标签列表：
+/// - "most_used"：按使用次数降序排列（默认）
+/// - "recent_used"：按更新时间降序排列
 ///
 /// # 参数
 /// - `db`: 全局数据库实例
 /// - `limit`: 返回的标签数量限制，默认为 10
+/// - `mode`: 排序模式，"most_used" 或 "recent_used"
 ///
 /// # 返回
-/// - `Ok(Vec<Tag>)`: 标签列表，按使用次数降序排列
+/// - `Ok(Vec<Tag>)`: 标签列表
 /// - `Err(String)`: 错误信息
 #[tauri::command]
-pub async fn get_most_used_tags(
+pub async fn get_tag_list(
     db: State<'_, GlobalDatabase>,
     limit: Option<i32>,
+    mode: Option<String>,
 ) -> Result<Vec<Tag>, String> {
-    TagService::get_most_used_tags(&*db, limit).await
+    TagService::get_tag_list(&*db, limit, mode).await
 }

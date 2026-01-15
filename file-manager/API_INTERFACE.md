@@ -683,18 +683,26 @@ pub async fn copy_files(paths: Vec<String>, target_path: String) -> Result<(), S
 
 ## 标签管理接口
 
-### 7. get_most_used_tags - 获取使用数量最多的标签
+### 7. get_tag_list - 获取标签列表
 
-**功能描述**：获取使用次数最多的标签列表，按使用次数降序排列。用于在工具栏标签面板中显示最常用的标签。
+**功能描述**：根据指定排序模式获取标签列表，可按使用次数或最近更新时间排序。用于在工具栏标签面板中显示常用或最近使用的标签。
 
-**接口名称**：`get_most_used_tags`
+**接口名称**：`get_tag_list`
 
 **调用方式**：
 ```typescript
 import { invoke } from '@tauri-apps/api/core';
 
-const tags = await invoke<Tag[]>('get_most_used_tags', {
-  limit: 10
+// 获取使用次数最多的标签（默认）
+const mostUsedTags = await invoke<Tag[]>('get_tag_list', {
+  limit: 10,
+  mode: 'most_used',
+});
+
+// 获取最近使用的标签
+const recentUsedTags = await invoke<Tag[]>('get_tag_list', {
+  limit: 10,
+  mode: 'recent_used',
 });
 ```
 
@@ -703,9 +711,10 @@ const tags = await invoke<Tag[]>('get_most_used_tags', {
 **Rust 后端**：
 ```rust
 #[tauri::command]
-pub async fn get_most_used_tags(
+pub async fn get_tag_list(
     db: State<'_, GlobalDatabase>,
     limit: Option<i32>,
+    mode: Option<String>,
 ) -> Result<Vec<Tag>, String>
 ```
 
@@ -714,17 +723,21 @@ pub async fn get_most_used_tags(
 | 参数名 | 类型 | 必填 | 说明 |
 |--------|------|------|------|
 | `limit` | `Option<i32>` | 否 | 返回的标签数量限制，默认为 10 |
+| `mode`  | `Option<String>` | 否 | 排序模式：`"most_used"`（默认，按 `usage_count` 降序）或 `"recent_used"`（按 `updated_at` 降序） |
 
 **TypeScript 前端**：
 ```typescript
-interface GetMostUsedTagsRequest {
+type TagListMode = 'most_used' | 'recent_used';
+
+interface GetTagListRequest {
   limit?: number;
+  mode?: TagListMode;
 }
 ```
 
 #### 返回数据
 
-**成功返回**：`Tag[]` 标签数组，按使用次数降序排列
+**成功返回**：`Tag[]` 标签数组
 
 **错误返回**：`String` 错误信息
 
@@ -1193,9 +1206,9 @@ export interface Tag {
 ## 📅 版本记录
 
 ### v1.4.0 (2025-12-XX)
-- 添加 `get_most_used_tags` 接口，支持获取使用数量最多的标签
-- 工具栏添加标签图标和展开/收起功能
-- 添加 `Tag` 数据结构定义
+- 添加 `get_tag_list` 接口，支持获取使用数量最多的标签和最近使用的标签
+- 工具栏添加标签图标、展开/收起功能和排序下拉菜单
+- 添加并扩展 `Tag` 数据结构定义（支持背景色和字体颜色）
 
 ### v1.3.0 (2025-12-XX)
 - 添加 `cut_files` 接口，支持剪切文件/文件夹

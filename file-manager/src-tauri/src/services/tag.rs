@@ -10,18 +10,22 @@ use sqlx::{Pool, Postgres, Sqlite, Row};
 pub struct TagService;
 
 impl TagService {
-    /// 获取使用数量最多的标签
+    /// 获取标签列表
     ///
     /// # 参数
     /// - `db`: 全局数据库实例
     /// - `limit`: 返回的标签数量限制，默认为 10
+    /// - `mode`: 排序模式：
+    ///   - "most_used"：按使用次数降序排列（默认）
+    ///   - "recent_used"：按更新时间降序排列
     ///
     /// # 返回
-    /// - `Ok(Vec<Tag>)`: 标签列表，按使用次数降序排列
+    /// - `Ok(Vec<Tag>)`: 标签列表
     /// - `Err(String)`: 错误信息
-    pub async fn get_most_used_tags(
+    pub async fn get_tag_list(
         db: &GlobalDatabase,
         limit: Option<i32>,
+        mode: Option<String>,
     ) -> Result<Vec<Tag>, String> {
         let connection = db
             .get_connection()
@@ -29,23 +33,30 @@ impl TagService {
             .map_err(|e| format!("获取数据库连接失败: {}", e))?;
 
         let limit = limit.unwrap_or(10);
+        let mode = mode.unwrap_or_else(|| "most_used".to_string());
 
         match connection {
             DatabaseConnectionRef::Postgres(pool) => {
-                Self::get_most_used_tags_postgres(&pool, limit).await
+                Self::get_tag_list_postgres(&pool, limit, &mode).await
             }
             DatabaseConnectionRef::Sqlite(pool) => {
-                Self::get_most_used_tags_sqlite(&pool, limit).await
+                Self::get_tag_list_sqlite(&pool, limit, &mode).await
             }
         }
     }
 
-    /// PostgreSQL 实现：获取使用数量最多的标签
-    async fn get_most_used_tags_postgres(
+    /// PostgreSQL 实现：获取标签列表
+    async fn get_tag_list_postgres(
         pool: &Pool<Postgres>,
         limit: i32,
+        mode: &str,
     ) -> Result<Vec<Tag>, String> {
-        let rows = sqlx::query(
+        let order_clause = match mode {
+            "recent_used" => "ORDER BY updated_at DESC, id ASC",
+            _ => "ORDER BY usage_count DESC, id ASC",
+        };
+
+        let query = format!(
             r#"
             SELECT
                 id,
@@ -58,10 +69,12 @@ impl TagService {
                 TO_CHAR(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as updated_at
             FROM tags
             WHERE deleted_at IS NULL
-            ORDER BY usage_count DESC, id ASC
+            {order_clause}
             LIMIT $1
-            "#,
-        )
+            "#
+        );
+
+        let rows = sqlx::query(&query)
         .bind(limit)
         .fetch_all(pool)
         .await
@@ -84,12 +97,18 @@ impl TagService {
         Ok(tags)
     }
 
-    /// SQLite 实现：获取使用数量最多的标签
-    async fn get_most_used_tags_sqlite(
+    /// SQLite 实现：获取标签列表
+    async fn get_tag_list_sqlite(
         pool: &Pool<Sqlite>,
         limit: i32,
+        mode: &str,
     ) -> Result<Vec<Tag>, String> {
-        let rows = sqlx::query(
+        let order_clause = match mode {
+            "recent_used" => "ORDER BY updated_at DESC, id ASC",
+            _ => "ORDER BY usage_count DESC, id ASC",
+        };
+
+        let query = format!(
             r#"
             SELECT
                 id,
@@ -102,10 +121,12 @@ impl TagService {
                 datetime(updated_at) as updated_at
             FROM tags
             WHERE deleted_at IS NULL
-            ORDER BY usage_count DESC, id ASC
+            {order_clause}
             LIMIT $1
-            "#,
-        )
+            "#
+        );
+
+        let rows = sqlx::query(&query)
         .bind(limit)
         .fetch_all(pool)
         .await

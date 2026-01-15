@@ -55,6 +55,31 @@
 
     <!-- 标签面板展开区域 -->
     <div v-if="isTagPanelExpanded" class="tag-panel">
+      <div class="tag-panel-row tag-panel-header">
+        <div class="tag-panel-title">标签</div>
+        <div class="tag-sort-dropdown" @click.stop="toggleTagSortDropdown">
+          <span class="tag-sort-label">
+            {{ tagSortMode === 'most_used' ? '最多使用' : '最近使用' }}
+          </span>
+          <img src="../assets/icon/pull_down.svg" alt="排序" class="tag-sort-icon" />
+          <div v-if="isTagSortDropdownOpen" class="tag-sort-menu">
+            <div
+              class="tag-sort-option"
+              :class="{ active: tagSortMode === 'most_used' }"
+              @click.stop="changeTagSortMode('most_used')"
+            >
+              最多使用
+            </div>
+            <div
+              class="tag-sort-option"
+              :class="{ active: tagSortMode === 'recent_used' }"
+              @click.stop="changeTagSortMode('recent_used')"
+            >
+              最近使用
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="tag-panel-row">
         <div class="tag-list">
           <div
@@ -107,6 +132,8 @@ const hoveredButton = ref<'cut' | 'copy' | 'paste' | 'tag' | null>(null);
 const isTagPanelExpanded = ref(false);
 const mostUsedTags = ref<Tag[]>([]);
 const loadingTags = ref(false);
+const tagSortMode = ref<'most_used' | 'recent_used'>('most_used');
+const isTagSortDropdownOpen = ref(false);
 
 // 是否可以剪切或复制（有选中项时可用）
 const canCutOrCopy = computed(() => {
@@ -193,15 +220,29 @@ async function toggleTagPanel() {
 
   // 如果展开且标签列表为空，则加载标签
   if (isTagPanelExpanded.value && mostUsedTags.value.length === 0) {
-    await loadMostUsedTags();
+    await loadTagList();
   }
 }
 
-// 加载最常用的标签
-async function loadMostUsedTags() {
+function toggleTagSortDropdown() {
+  isTagSortDropdownOpen.value = !isTagSortDropdownOpen.value;
+}
+
+async function changeTagSortMode(mode: 'most_used' | 'recent_used') {
+  if (tagSortMode.value === mode) return;
+  tagSortMode.value = mode;
+  isTagSortDropdownOpen.value = false;
+  await loadTagList();
+}
+
+// 加载标签列表
+async function loadTagList() {
   loadingTags.value = true;
   try {
-    const tags = await invoke<Tag[]>('get_most_used_tags', { limit: 10 });
+    const tags = await invoke<Tag[]>('get_tag_list', {
+      limit: 10,
+      mode: tagSortMode.value,
+    });
     mostUsedTags.value = tags;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -316,6 +357,74 @@ async function loadMostUsedTags() {
 
 .tag-panel-row:last-child {
   margin-bottom: 0;
+}
+
+.tag-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tag-panel-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+.tag-sort-dropdown {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  color: #555;
+}
+
+.tag-sort-dropdown:hover {
+  background-color: #f0f0f0;
+}
+
+.tag-sort-label {
+  line-height: 1;
+}
+
+.tag-sort-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.tag-sort-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 80px;
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  z-index: 100;
+}
+
+.tag-sort-option {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: #555;
+  cursor: pointer;
+}
+
+.tag-sort-option:hover {
+  background-color: #f5f5f5;
+}
+
+.tag-sort-option.active {
+  color: #1d4ed8;
+  font-weight: 500;
+  background-color: #eff6ff;
 }
 
 .tag-list {
