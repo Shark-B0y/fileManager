@@ -45,6 +45,36 @@ impl TagService {
         }
     }
 
+    /// 创建新标签
+    ///
+    /// # 参数
+    /// - `db`: 全局数据库实例
+    /// - `name`: 标签名称
+    ///
+    /// # 返回
+    /// - `Ok(Tag)`: 创建成功的标签
+    /// - `Err(String)`: 错误信息
+    pub async fn create_tag(db: &GlobalDatabase, name: String) -> Result<Tag, String> {
+        let trimmed_name = name.trim();
+        if trimmed_name.is_empty() {
+            return Err("标签名称不能为空".to_string());
+        }
+
+        let connection = db
+            .get_connection()
+            .await
+            .map_err(|e| format!("获取数据库连接失败: {}", e))?;
+
+        match connection {
+            DatabaseConnectionRef::Postgres(pool) => {
+                Self::create_tag_postgres(&pool, trimmed_name).await
+            }
+            DatabaseConnectionRef::Sqlite(pool) => {
+                Self::create_tag_sqlite(&pool, trimmed_name).await
+            }
+        }
+    }
+
     /// PostgreSQL 实现：获取标签列表
     async fn get_tag_list_postgres(
         pool: &Pool<Postgres>,
@@ -75,10 +105,10 @@ impl TagService {
         );
 
         let rows = sqlx::query(&query)
-        .bind(limit)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| format!("查询标签失败: {}", e))?;
+            .bind(limit)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("查询标签失败: {}", e))?;
 
         let mut tags = Vec::new();
         for row in rows {
@@ -127,10 +157,10 @@ impl TagService {
         );
 
         let rows = sqlx::query(&query)
-        .bind(limit)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| format!("查询标签失败: {}", e))?;
+            .bind(limit)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("查询标签失败: {}", e))?;
 
         let mut tags = Vec::new();
         for row in rows {
@@ -147,5 +177,114 @@ impl TagService {
         }
 
         Ok(tags)
+    }
+
+    /// PostgreSQL 实现：创建新标签
+    async fn create_tag_postgres(pool: &Pool<Postgres>, name: &str) -> Result<Tag, String> {
+        // 检查是否已存在同名标签
+        let exists_row = sqlx::query(
+            r#"
+            SELECT 1
+            FROM tags
+            WHERE name = $1 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(name)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("检查标签是否存在失败: {}", e))?;
+
+        if exists_row.is_some() {
+            return Err(format!("标签 \"{}\" 已存在", name));
+        }
+
+        // 使用数据库默认值插入
+        let row = sqlx::query(
+            r#"
+            INSERT INTO tags (name)
+            VALUES ($1)
+            RETURNING
+                id,
+                name,
+                color,
+                font_color,
+                parent_id,
+                usage_count,
+                TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
+                TO_CHAR(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as updated_at
+            "#,
+        )
+        .bind(name)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("创建标签失败: {}", e))?;
+
+        Ok(Tag {
+            id: row.get("id"),
+            name: row.get("name"),
+            color: row.get("color"),
+            font_color: row.get("font_color"),
+            parent_id: row.get("parent_id"),
+            usage_count: row.get("usage_count"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+    }
+
+    /// SQLite 实现：创建新标签
+    async fn create_tag_sqlite(pool: &Pool<Sqlite>, name: &str) -> Result<Tag, String> {
+        // 检查是否已存在同名标签
+        let exists_row = sqlx::query(
+            r#"
+            SELECT 1
+            FROM tags
+            WHERE name = ?1 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(name)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("检查标签是否存在失败: {}", e))?;
+
+        if exists_row.is_some() {
+            return Err(format!("标签 \"{}\" 已存在", name));
+        }
+
+        // 使用数据库默认值插入
+        let row = sqlx::query(
+            r#"
+            INSERT INTO tags (name)
+            VALUES (?1);
+
+            SELECT
+                id,
+                name,
+                color,
+                font_color,
+                parent_id,
+                usage_count,
+                datetime(created_at) as created_at,
+                datetime(updated_at) as updated_at
+            FROM tags
+            WHERE name = ?1 AND deleted_at IS NULL
+            ORDER BY id DESC
+            LIMIT 1;
+            "#,
+        )
+        .bind(name)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("创建标签失败: {}", e))?;
+
+        Ok(Tag {
+            id: row.get("id"),
+            name: row.get("name"),
+            color: row.get("color"),
+            font_color: row.get("font_color"),
+            parent_id: row.get("parent_id"),
+            usage_count: row.get("usage_count"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
     }
 }

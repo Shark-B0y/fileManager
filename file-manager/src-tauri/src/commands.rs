@@ -79,7 +79,7 @@ pub async fn list_directory(path: String) -> Result<DirectoryInfo, String> {
 pub async fn get_home_directory(
     global_config: State<'_, GlobalConfigManager>,
 ) -> Result<String, String> {
-    FileSystemService::get_home_directory(global_config)
+    FileSystemService::get_home_directory(&*global_config)
 }
 
 /// 获取所有驱动盘列表
@@ -163,4 +163,27 @@ pub async fn get_tag_list(
     mode: Option<String>,
 ) -> Result<Vec<Tag>, String> {
     TagService::get_tag_list(&*db, limit, mode).await
+}
+
+/// 创建新标签
+///
+/// 使用指定名称创建一个新标签，其它字段使用数据库默认值：
+/// - color: '#FFFF00'
+/// - font_color: '#000000'
+/// - usage_count: 0
+/// - parent_id: NULL
+///
+/// # 参数
+/// - `db`: 全局数据库实例
+/// - `name`: 标签名称
+///
+/// # 返回
+/// - `Ok(Tag)`: 创建成功的标签
+/// - `Err(String)`: 错误信息（名称为空或重复等）
+#[tauri::command]
+pub async fn create_tag(
+    db: State<'_, GlobalDatabase>,
+    name: String,
+) -> Result<Tag, String> {
+    TagService::create_tag(&*db, name).await
 }

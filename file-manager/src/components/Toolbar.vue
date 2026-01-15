@@ -55,12 +55,53 @@
 
     <!-- 标签面板展开区域 -->
     <div v-if="isTagPanelExpanded" class="tag-panel">
-      <div class="tag-panel-row tag-panel-header">
-        <div class="tag-panel-title">标签</div>
+      <div class="tag-panel-row tags-row">
+        <div class="tag-add-wrapper">
+          <button class="tag-add-button" @click.stop="toggleAddTagInput">
+            <img src="../assets/icon/add.svg" alt="新增标签" class="tag-add-icon" />
+          </button>
+          <div v-if="showAddTagInput" class="tag-add-input-wrapper">
+            <input
+              ref="addTagInputRef"
+              v-model="newTagName"
+              class="tag-add-input"
+              type="text"
+              placeholder="输入标签名称后回车"
+              @keyup.enter="handleCreateTag"
+              @blur="hideAddTagInput"
+            />
+          </div>
+        </div>
+        <div
+          ref="tagListContainer"
+          class="tag-list-scroll"
+          :class="{ dragging: isDraggingTagList }"
+          @mousedown.prevent="onTagListMouseDown"
+          @mousemove.prevent="onTagListMouseMove"
+          @mouseup="onTagListMouseUp"
+          @mouseleave="onTagListMouseUp"
+        >
+          <div class="tag-list">
+            <div
+              v-for="tag in mostUsedTags"
+              :key="tag.id"
+              class="tag-item"
+              :style="{
+                backgroundColor: tag.color || '#FFFF00',
+                color: tag.font_color || '#000000'
+              }"
+            >
+              {{ tag.name }}
+            </div>
+            <div v-if="mostUsedTags.length === 0 && !loadingTags" class="tag-empty">
+              暂无标签
+            </div>
+            <div v-if="loadingTags" class="tag-loading">
+              加载中...
+            </div>
+          </div>
+        </div>
         <div class="tag-sort-dropdown" @click.stop="toggleTagSortDropdown">
-          <span class="tag-sort-label">
-            {{ tagSortMode === 'most_used' ? '最多使用' : '最近使用' }}
-          </span>
           <img src="../assets/icon/pull_down.svg" alt="排序" class="tag-sort-icon" />
           <div v-if="isTagSortDropdownOpen" class="tag-sort-menu">
             <div
@@ -79,30 +120,6 @@
             </div>
           </div>
         </div>
-      </div>
-      <div class="tag-panel-row">
-        <div class="tag-list">
-          <div
-            v-for="tag in mostUsedTags"
-            :key="tag.id"
-            class="tag-item"
-            :style="{
-              backgroundColor: tag.color || '#FFFF00',
-              color: tag.font_color || '#000000'
-            }"
-          >
-            {{ tag.name }}
-          </div>
-          <div v-if="mostUsedTags.length === 0 && !loadingTags" class="tag-empty">
-            暂无标签
-          </div>
-          <div v-if="loadingTags" class="tag-loading">
-            加载中...
-          </div>
-        </div>
-      </div>
-      <div class="tag-panel-row">
-        <!-- 第二行可以用于其他标签功能 -->
       </div>
     </div>
   </div>
@@ -134,6 +151,13 @@ const mostUsedTags = ref<Tag[]>([]);
 const loadingTags = ref(false);
 const tagSortMode = ref<'most_used' | 'recent_used'>('most_used');
 const isTagSortDropdownOpen = ref(false);
+const tagListContainer = ref<HTMLElement | null>(null);
+const isDraggingTagList = ref(false);
+const dragStartX = ref(0);
+const dragStartScrollLeft = ref(0);
+const showAddTagInput = ref(false);
+const newTagName = ref('');
+const addTagInputRef = ref<HTMLInputElement | null>(null);
 
 // 是否可以剪切或复制（有选中项时可用）
 const canCutOrCopy = computed(() => {
@@ -224,6 +248,51 @@ async function toggleTagPanel() {
   }
 }
 
+function toggleAddTagInput() {
+  showAddTagInput.value = !showAddTagInput.value;
+  if (showAddTagInput.value) {
+    newTagName.value = '';
+    // 下一帧聚焦输入框
+    requestAnimationFrame(() => {
+      addTagInputRef.value?.focus();
+    });
+  }
+}
+
+function hideAddTagInput() {
+  // 失焦时如果没有内容就直接关闭
+  if (!newTagName.value.trim()) {
+    showAddTagInput.value = false;
+  }
+}
+
+async function handleCreateTag() {
+  const name = newTagName.value.trim();
+  if (!name) {
+    window.dispatchEvent(
+      new CustomEvent('show-global-error', {
+        detail: { message: '标签名称不能为空' },
+      }),
+    );
+    return;
+  }
+
+  try {
+    await invoke<Tag>('create_tag', { name });
+    showAddTagInput.value = false;
+    newTagName.value = '';
+    // 重新加载当前排序模式下的标签列表
+    await loadTagList();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    window.dispatchEvent(
+      new CustomEvent('show-global-error', {
+        detail: { message },
+      }),
+    );
+  }
+}
+
 function toggleTagSortDropdown() {
   isTagSortDropdownOpen.value = !isTagSortDropdownOpen.value;
 }
@@ -233,6 +302,23 @@ async function changeTagSortMode(mode: 'most_used' | 'recent_used') {
   tagSortMode.value = mode;
   isTagSortDropdownOpen.value = false;
   await loadTagList();
+}
+
+function onTagListMouseDown(event: MouseEvent) {
+  if (!tagListContainer.value) return;
+  isDraggingTagList.value = true;
+  dragStartX.value = event.clientX;
+  dragStartScrollLeft.value = tagListContainer.value.scrollLeft;
+}
+
+function onTagListMouseMove(event: MouseEvent) {
+  if (!isDraggingTagList.value || !tagListContainer.value) return;
+  const deltaX = event.clientX - dragStartX.value;
+  tagListContainer.value.scrollLeft = dragStartScrollLeft.value - deltaX;
+}
+
+function onTagListMouseUp() {
+  isDraggingTagList.value = false;
 }
 
 // 加载标签列表
@@ -359,16 +445,76 @@ async function loadTagList() {
   margin-bottom: 0;
 }
 
-.tag-panel-header {
+.tags-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
 }
 
-.tag-panel-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: #333;
+.tag-add-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-right: 4px;
+}
+
+.tag-add-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-color: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tag-add-button:hover {
+  background-color: #f0f0f0;
+}
+
+.tag-add-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.tag-add-input-wrapper {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 4px;
+  padding: 4px 6px;
+  background-color: #ffffff;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  z-index: 110;
+}
+
+.tag-add-input {
+  width: 140px;
+  padding: 4px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+}
+
+.tag-add-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+}
+
+.tag-list-scroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  cursor: grab;
+}
+
+.tag-list-scroll.dragging {
+  cursor: grabbing;
 }
 
 .tag-sort-dropdown {
@@ -386,10 +532,6 @@ async function loadTagList() {
 
 .tag-sort-dropdown:hover {
   background-color: #f0f0f0;
-}
-
-.tag-sort-label {
-  line-height: 1;
 }
 
 .tag-sort-icon {
@@ -429,7 +571,7 @@ async function loadTagList() {
 
 .tag-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   align-items: center;
 }

@@ -6,7 +6,6 @@ use std::fs;
 use std::path::Path;
 
 use crate::models::file_system::{FileItem, DirectoryInfo};
-use tauri::State;
 use crate::config::GlobalConfigManager;
 
 /// 文件系统服务
@@ -172,7 +171,7 @@ impl FileSystemService {
     /// # 返回
     /// - `Ok(String)`: 用户主目录路径
     /// - `Err(String)`: 错误信息
-    pub fn get_home_directory(global_config: State<'_, GlobalConfigManager>) -> Result<String, String> {
+    pub fn get_home_directory(global_config: &GlobalConfigManager) -> Result<String, String> {
         // Windows 上使用环境变量
         #[cfg(windows)]
         {

@@ -745,6 +745,58 @@ interface GetTagListRequest {
 - `"获取数据库连接失败: {error}"` - 无法获取数据库连接
 - `"查询标签失败: {error}"` - 数据库查询失败
 
+### 8. create_tag - 创建新标签
+
+**功能描述**：根据给定名称创建一个新的标签，其它字段使用数据库默认值。用于在标签工具栏中快速新建标签。
+
+**接口名称**：`create_tag`
+
+**调用方式**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+import type { Tag } from '../types/tag';
+
+const newTag = await invoke<Tag>('create_tag', {
+  name: '旅游/日本',
+});
+```
+
+#### 请求参数
+
+**Rust 后端**：
+```rust
+#[tauri::command]
+pub async fn create_tag(
+    db: State<'_, GlobalDatabase>,
+    name: String,
+) -> Result<Tag, String>
+```
+
+**参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| `name` | `String` | 是 | 标签名称（不能为空，不能与现有标签重复） |
+
+**TypeScript 前端**：
+```typescript
+interface CreateTagRequest {
+  name: string;
+}
+```
+
+#### 返回数据
+
+**成功返回**：`Tag` 新创建的标签对象，字段与 `Tag` 数据结构一致。
+
+**错误返回**：`String` 错误信息
+
+**常见错误**：
+- `"标签名称不能为空"` - 传入的名称为空或仅空白字符
+- `"标签 \"{name}\" 已存在"` - 已存在同名且未删除的标签
+- `"获取数据库连接失败: {error}"` - 无法获取数据库连接
+- `"创建标签失败: {error}"` - 数据库插入或查询失败
+
 #### 数据结构
 
 **Rust 后端** (`src-tauri/src/models/tag.rs`)：

@@ -353,6 +353,14 @@ function showErrorMessage(message: string) {
   }, 2000);
 }
 
+// 监听全局错误事件（供其他组件触发）
+window.addEventListener('show-global-error', (event: Event) => {
+  const customEvent = event as CustomEvent<{ message: string }>;
+  if (customEvent.detail?.message) {
+    showErrorMessage(customEvent.detail.message);
+  }
+});
+
 // 处理搜索输入
 function handleSearchInput() {
   if (directoryInfo.value?.items) {
@@ -774,8 +782,8 @@ onUnmounted(() => {
   transform: translateX(-50%);
   background-color: #f44336;
   color: #ffffff;
-  padding: 12px 24px;
-  border-radius: 4px;
+  padding: 10px 20px;
+  border-radius: 10px;
   font-size: 14px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 1000;
