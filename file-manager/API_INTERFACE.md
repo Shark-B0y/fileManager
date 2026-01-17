@@ -30,6 +30,7 @@
   - [5. cut_files - 剪切文件](#5-cut_files---剪切文件)
   - [6. copy_files - 复制文件](#6-copy_files---复制文件)
   - [7. rename_file - 重命名文件](#7-rename_file---重命名文件)
+  - [8. delete_files - 删除文件](#8-delete_files---删除文件)
 - [标签管理接口](#标签管理接口)
   - [7. get_most_used_tags - 获取使用数量最多的标签](#7-get_most_used_tags---获取使用数量最多的标签)
 - [示例命令](#示例命令)
@@ -822,9 +823,130 @@ pub fn rename_file(old_path: &str, new_name: &str) -> Result<(), String> {
 
 ---
 
+### 8. delete_files - 删除文件
+
+**功能描述**：删除指定的文件/文件夹列表，支持递归删除文件夹。删除操作不可撤销，请谨慎使用。
+
+**接口名称**：`delete_files`
+
+**调用方式**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+await invoke('delete_files', {
+  paths: ['C:\\Users\\Username\\file1.txt', 'C:\\Users\\Username\\folder1']
+});
+```
+
+#### 请求参数
+
+**Rust 后端**：
+```rust
+#[tauri::command]
+pub async fn delete_files(paths: Vec<String>) -> Result<(), String>
+```
+
+**参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| `paths` | `Vec<String>` | 是 | 要删除的文件/文件夹路径列表 |
+
+**TypeScript 前端**：
+```typescript
+interface DeleteFilesRequest {
+  paths: string[];
+}
+```
+
+#### 返回数据
+
+**成功返回**：无返回值（`void`）
+
+**错误返回**：`String` 错误信息
+
+**常见错误**：
+- `"路径不存在: {path}"` - 指定的路径不存在
+- `"删除文件失败 {path}: {error}"` - 删除文件时发生错误
+- `"删除文件夹失败 {path}: {error}"` - 删除文件夹时发生错误
+
+#### 使用示例
+
+**前端调用**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+async function deleteFiles(paths: string[]): Promise<void> {
+  try {
+    await invoke('delete_files', { paths });
+    console.log('删除成功');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('删除失败:', errorMessage);
+    throw error;
+  }
+}
+
+// 使用示例：删除单个文件
+await deleteFiles(['C:\\Users\\Username\\file.txt']);
+
+// 使用示例：删除多个文件和文件夹
+await deleteFiles([
+  'C:\\Users\\Username\\file1.txt',
+  'C:\\Users\\Username\\file2.txt',
+  'C:\\Users\\Username\\folder1'
+]);
+```
+
+**后端实现** (`src-tauri/src/commands.rs`)：
+```rust
+#[tauri::command]
+pub async fn delete_files(paths: Vec<String>) -> Result<(), String> {
+    FileSystemService::delete_files(&paths)
+}
+```
+
+**后端服务实现** (`src-tauri/src/services/file_system.rs`)：
+```rust
+pub fn delete_files(paths: &[String]) -> Result<(), String> {
+    for path in paths {
+        let target_path = Path::new(path);
+
+        // 检查路径是否存在
+        if !target_path.exists() {
+            return Err(format!("路径不存在: {}", path));
+        }
+
+        // 删除文件或文件夹
+        if target_path.is_dir() {
+            // 递归删除目录
+            fs::remove_dir_all(target_path)
+                .map_err(|e| format!("删除文件夹失败 {}: {}", path, e))?;
+        } else {
+            // 删除文件
+            fs::remove_file(target_path)
+                .map_err(|e| format!("删除文件失败 {}: {}", path, e))?;
+        }
+    }
+
+    Ok(())
+}
+```
+
+#### 注意事项
+
+1. **不可撤销**：删除操作不可撤销，删除的文件/文件夹无法恢复，请谨慎使用
+2. **批量删除**：支持同时删除多个文件/文件夹
+3. **递归删除**：如果删除的是文件夹，会递归删除文件夹内的所有内容
+4. **权限要求**：需要对要删除的路径有写入权限
+5. **使用场景**：主要用于工具栏删除按钮，当选中文件或文件夹后，点击删除按钮会弹出确认对话框，确认后执行删除操作
+6. **确认机制**：前端应在调用此接口前显示确认对话框，防止误删
+
+---
+
 ## 标签管理接口
 
-### 8. get_tag_list - 获取标签列表
+### 9. get_tag_list - 获取标签列表
 
 **功能描述**：根据指定排序模式获取标签列表，可按使用次数或最近更新时间排序。用于在工具栏标签面板中显示常用或最近使用的标签。
 
@@ -886,7 +1008,7 @@ interface GetTagListRequest {
 - `"获取数据库连接失败: {error}"` - 无法获取数据库连接
 - `"查询标签失败: {error}"` - 数据库查询失败
 
-### 9. create_tag - 创建新标签
+### 10. create_tag - 创建新标签
 
 **功能描述**：根据给定名称创建一个新的标签，其它字段使用数据库默认值。用于在标签工具栏中快速新建标签。
 
@@ -1031,7 +1153,7 @@ pub async fn get_most_used_tags(
 
 ## 示例命令
 
-### 10. greet - 问候命令
+### 11. greet - 问候命令
 
 **功能描述**：示例命令，用于测试前后端通信是否正常。
 
@@ -1259,6 +1381,7 @@ export interface DirectoryInfo {
             commands::cut_files,
             commands::copy_files,
             commands::rename_file,
+            commands::delete_files,
             commands::get_tag_list,
             commands::create_tag
         ])
@@ -1400,6 +1523,12 @@ export interface Tag {
 ---
 
 ## 📅 版本记录
+
+### v1.6.0 (2025-12-XX)
+- 添加 `delete_files` 接口，支持删除文件/文件夹（支持递归删除）
+- 工具栏添加删除按钮，当选中文件/文件夹时启用
+- 删除操作前显示确认对话框，防止误删
+- 删除完成后自动刷新当前目录
 
 ### v1.5.0 (2025-12-XX)
 - 添加 `rename_file` 接口，支持重命名文件/文件夹

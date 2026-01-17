@@ -30,6 +30,12 @@ function handleRename(item: FileItem) {
     mainContentRef.value.startRename(item);
   }
 }
+
+// 处理删除完成
+function handleDeleteComplete() {
+  // 删除完成后可以执行一些操作，比如显示提示
+  console.log('删除完成');
+}
 </script>
 
 <template>
@@ -40,6 +46,7 @@ function handleRename(item: FileItem) {
       @paste-complete="handlePasteComplete"
       @error="handleError"
       @rename="handleRename"
+      @delete-complete="handleDeleteComplete"
     />
     <MainContent ref="mainContentRef" />
   </div>

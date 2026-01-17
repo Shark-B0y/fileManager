@@ -49,6 +49,18 @@
           <img src="../assets/icon/rename.svg" alt="重命名" class="icon" />
           <span v-if="hoveredButton === 'rename'" class="tooltip">重命名</span>
         </button>
+
+        <button
+          class="toolbar-button"
+          :class="{ disabled: !canDelete }"
+          :disabled="!canDelete"
+          @click="handleDelete"
+          @mouseenter="hoveredButton = 'delete'"
+          @mouseleave="hoveredButton = null"
+        >
+          <img src="../assets/icon/delete.svg" alt="删除" class="icon" />
+          <span v-if="hoveredButton === 'delete'" class="tooltip">删除</span>
+        </button>
       </div>
 
       <div class="toolbar-group toolbar-group-right">
@@ -153,12 +165,13 @@ const emit = defineEmits<{
   'paste-complete': [];
   'error': [message: string];
   'rename': [item: FileItem];
+  'delete-complete': [];
 }>();
 
 const { clipboardData, setCut, setCopy, hasData, clear } = useClipboard();
 const { currentPath, refresh } = useFileSystem();
 
-const hoveredButton = ref<'cut' | 'copy' | 'paste' | 'rename' | 'tag' | null>(null);
+const hoveredButton = ref<'cut' | 'copy' | 'paste' | 'rename' | 'delete' | 'tag' | null>(null);
 const isTagPanelExpanded = ref(false);
 const mostUsedTags = ref<Tag[]>([]);
 const loadingTags = ref(false);
@@ -185,6 +198,11 @@ const canPaste = computed(() => {
 // 是否可以重命名（选中单个文件或文件夹时可用）
 const canRename = computed(() => {
   return props.selectedItems.length === 1;
+});
+
+// 是否可以删除（有选中项时可用）
+const canDelete = computed(() => {
+  return props.selectedItems.length > 0;
 });
 
 // 处理剪切
@@ -219,6 +237,34 @@ function handleRename() {
 
   const item = props.selectedItems[0];
   emit('rename', item);
+}
+
+// 处理删除
+async function handleDelete() {
+  if (!canDelete.value) return;
+
+  // 确认删除
+  const itemCount = props.selectedItems.length;
+  const confirmMessage = itemCount === 1
+    ? `确定要删除 "${props.selectedItems[0].name}" 吗？此操作不可撤销。`
+    : `确定要删除选中的 ${itemCount} 个项目吗？此操作不可撤销。`;
+
+  if (!confirm(confirmMessage)) {
+    return;
+  }
+
+  try {
+    const paths = props.selectedItems.map(item => item.path);
+    await invoke('delete_files', { paths });
+
+    // 刷新当前目录
+    await refresh();
+
+    emit('delete-complete');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emit('error', `删除失败: ${message}`);
+  }
 }
 
 // 处理粘贴

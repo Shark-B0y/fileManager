@@ -203,3 +203,18 @@ pub async fn create_tag(
 pub async fn rename_file(old_path: String, new_name: String) -> Result<(), String> {
     FileSystemService::rename_file(&old_path, &new_name)
 }
+
+/// 删除文件或文件夹
+///
+/// 删除指定的文件/文件夹列表，支持递归删除文件夹
+///
+/// # 参数
+/// - `paths`: 要删除的文件/文件夹路径列表
+///
+/// # 返回
+/// - `Ok(())`: 操作成功
+/// - `Err(String)`: 错误信息
+#[tauri::command]
+pub async fn delete_files(paths: Vec<String>) -> Result<(), String> {
+    FileSystemService::delete_files(&paths)
+}

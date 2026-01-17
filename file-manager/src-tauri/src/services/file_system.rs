@@ -524,6 +524,40 @@ impl FileSystemService {
         Ok(())
     }
 
+    /// 删除文件或文件夹
+    ///
+    /// 删除指定的文件/文件夹列表，支持递归删除文件夹
+    ///
+    /// # 参数
+    /// - `paths`: 要删除的文件/文件夹路径列表
+    ///
+    /// # 返回
+    /// - `Ok(())`: 操作成功
+    /// - `Err(String)`: 错误信息
+    pub fn delete_files(paths: &[String]) -> Result<(), String> {
+        for path in paths {
+            let target_path = Path::new(path);
+
+            // 检查路径是否存在
+            if !target_path.exists() {
+                return Err(format!("路径不存在: {}", path));
+            }
+
+            // 删除文件或文件夹
+            if target_path.is_dir() {
+                // 递归删除目录
+                fs::remove_dir_all(target_path)
+                    .map_err(|e| format!("删除文件夹失败 {}: {}", path, e))?;
+            } else {
+                // 删除文件
+                fs::remove_file(target_path)
+                    .map_err(|e| format!("删除文件失败 {}: {}", path, e))?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// 格式化时间为 ISO 8601 格式
     ///
     /// # 参数
