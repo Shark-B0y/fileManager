@@ -8,7 +8,7 @@
     @click="handleClick"
     @dblclick="handleDoubleClick"
   >
-    <div class="item-cell name-cell">
+    <div class="item-cell name-cell" :style="nameCellStyle">
       <span class="item-icon">{{ iconChar }}</span>
       <span v-if="!isEditing" class="item-name">{{ item.name }}</span>
       <input
@@ -21,13 +21,13 @@
         @blur="handleRenameCancel"
       />
     </div>
-    <div class="item-cell date-cell">
+    <div class="item-cell date-cell" :style="{ width: columnWidths?.date || '180px' }">
       {{ formattedDate }}
     </div>
-    <div class="item-cell type-cell">
+    <div class="item-cell type-cell" :style="{ width: columnWidths?.type || '120px' }">
       {{ typeName }}
     </div>
-    <div class="item-cell size-cell">
+    <div class="item-cell size-cell" :style="{ width: columnWidths?.size || '100px' }">
       {{ formattedSize }}
     </div>
   </div>
@@ -43,6 +43,12 @@ const props = defineProps<{
   item: FileItem;
   isSelected?: boolean;
   isEditing?: boolean;
+  columnWidths?: {
+    name?: string;
+    date?: string;
+    type?: string;
+    size?: string;
+  };
 }>();
 
 const emit = defineEmits<{
@@ -72,6 +78,14 @@ const formattedDate = computed(() => {
 
 const typeName = computed(() => {
   return getFileTypeName(props.item);
+});
+
+// 计算 name 列的样式
+const nameCellStyle = computed(() => {
+  if (props.columnWidths?.name) {
+    return { width: props.columnWidths.name, flex: 'none' };
+  }
+  return { flex: '1 1 auto' };
 });
 
 // 监听编辑状态变化
@@ -226,7 +240,6 @@ onUnmounted(() => {
 }
 
 .name-cell {
-  flex: 1;
   min-width: 200px;
   display: flex;
   align-items: center;
@@ -262,16 +275,13 @@ onUnmounted(() => {
   box-shadow: 0 0 0 1px rgba(33, 150, 243, 0.2);
 }
 
-.date-cell {
-  width: 180px;
-}
-
-.type-cell {
-  width: 120px;
+.date-cell,
+.type-cell,
+.size-cell {
+  flex-shrink: 0;
 }
 
 .size-cell {
-  width: 100px;
   text-align: right;
   color: #666;
 }
