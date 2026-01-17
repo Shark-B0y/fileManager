@@ -37,6 +37,18 @@
           <img src="../assets/icon/paste.svg" alt="粘贴" class="icon" />
           <span v-if="hoveredButton === 'paste'" class="tooltip">粘贴</span>
         </button>
+
+        <button
+          class="toolbar-button"
+          :class="{ disabled: !canRename }"
+          :disabled="!canRename"
+          @click="handleRename"
+          @mouseenter="hoveredButton = 'rename'"
+          @mouseleave="hoveredButton = null"
+        >
+          <img src="../assets/icon/rename.svg" alt="重命名" class="icon" />
+          <span v-if="hoveredButton === 'rename'" class="tooltip">重命名</span>
+        </button>
       </div>
 
       <div class="toolbar-group toolbar-group-right">
@@ -140,12 +152,13 @@ const props = defineProps<{
 const emit = defineEmits<{
   'paste-complete': [];
   'error': [message: string];
+  'rename': [item: FileItem];
 }>();
 
 const { clipboardData, setCut, setCopy, hasData, clear } = useClipboard();
 const { currentPath, refresh } = useFileSystem();
 
-const hoveredButton = ref<'cut' | 'copy' | 'paste' | 'tag' | null>(null);
+const hoveredButton = ref<'cut' | 'copy' | 'paste' | 'rename' | 'tag' | null>(null);
 const isTagPanelExpanded = ref(false);
 const mostUsedTags = ref<Tag[]>([]);
 const loadingTags = ref(false);
@@ -167,6 +180,11 @@ const canCutOrCopy = computed(() => {
 // 是否可以粘贴（剪贴板有数据时可用）
 const canPaste = computed(() => {
   return hasData() && currentPath.value !== '';
+});
+
+// 是否可以重命名（选中单个文件或文件夹时可用）
+const canRename = computed(() => {
+  return props.selectedItems.length === 1;
 });
 
 // 处理剪切
@@ -193,6 +211,14 @@ async function handleCopy() {
     const message = error instanceof Error ? error.message : String(error);
     emit('error', `复制失败: ${message}`);
   }
+}
+
+// 处理重命名
+function handleRename() {
+  if (!canRename.value) return;
+
+  const item = props.selectedItems[0];
+  emit('rename', item);
 }
 
 // 处理粘贴

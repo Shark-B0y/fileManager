@@ -187,3 +187,19 @@ pub async fn create_tag(
 ) -> Result<Tag, String> {
     TagService::create_tag(&*db, name).await
 }
+
+/// 重命名文件或文件夹
+///
+/// 将指定路径的文件或文件夹重命名为新名称
+///
+/// # 参数
+/// - `old_path`: 原文件/文件夹路径
+/// - `new_name`: 新名称
+///
+/// # 返回
+/// - `Ok(())`: 操作成功
+/// - `Err(String)`: 错误信息
+#[tauri::command]
+pub async fn rename_file(old_path: String, new_name: String) -> Result<(), String> {
+    FileSystemService::rename_file(&old_path, &new_name)
+}

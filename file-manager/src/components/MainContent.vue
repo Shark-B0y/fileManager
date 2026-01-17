@@ -14,8 +14,11 @@
       ref="fileListRef"
       :items="directoryInfo.items"
       :selected-item-ids="selectedItemIds"
+      :editing-item-id="editingItemId"
       @item-click="handleItemClick"
       @item-double-click="handleItemDoubleClick"
+      @selection-change="handleSelectionChange"
+      @rename-complete="handleRenameComplete"
     />
 
     <div v-else class="empty">
@@ -38,10 +41,14 @@ const {
   initialize,
   loadDirectory,
   loadDrives,
+  refresh,
 } = useFileSystem();
 
 // 选中的文件/文件夹 ID 集合
 const selectedItemIds = ref<Set<string>>(new Set());
+
+// 正在编辑的文件项 ID
+const editingItemId = ref<string | null>(null);
 
 // FileList 组件引用
 const fileListRef = ref<InstanceType<typeof FileList> | null>(null);
@@ -77,6 +84,64 @@ function handleItemDoubleClick(item: FileItem) {
   // 只有文件夹才能通过双击进入
   if (item.file_type === 'folder') {
     enterDirectory(item.path);
+  }
+}
+
+// 处理框选变更事件
+function handleSelectionChange(selectedIds: Set<string>) {
+  selectedItemIds.value = selectedIds;
+}
+
+// 开始重命名
+function startRename(item: FileItem) {
+  // 确保该文件被选中
+  selectedItemIds.value = new Set([item.id]);
+  // 设置编辑状态
+  editingItemId.value = item.id;
+}
+
+// 处理重命名完成
+async function handleRenameComplete(itemId: string, newName: string) {
+  // 如果新名称为空，表示取消编辑
+  if (!newName) {
+    editingItemId.value = null;
+    return;
+  }
+
+  // 找到要重命名的文件项
+  const item = directoryInfo.value?.items.find(i => i.id === itemId);
+  if (!item) {
+    editingItemId.value = null;
+    return;
+  }
+
+  // 如果名称没有变化，直接取消编辑
+  if (newName === item.name) {
+    editingItemId.value = null;
+    return;
+  }
+
+  try {
+    // 调用后端接口重命名
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('rename_file', {
+      oldPath: item.path,
+      newName: newName,
+    });
+
+    // 刷新当前目录
+    await refresh();
+
+    // 清除编辑状态
+    editingItemId.value = null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    window.dispatchEvent(
+      new CustomEvent('show-global-error', {
+        detail: { message: `重命名失败: ${message}` },
+      }),
+    );
+    // 保持编辑状态，让用户继续修改
   }
 }
 
@@ -139,6 +204,7 @@ defineExpose({
   },
   selectedItemIds,
   selectedItems,
+  startRename,
 });
 
 // 初始化

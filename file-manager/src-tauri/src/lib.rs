@@ -55,6 +55,7 @@ pub fn run() {
             commands::check_path_exists,
             commands::cut_files,
             commands::copy_files,
+            commands::rename_file,
             commands::get_tag_list,
             commands::create_tag
         ])

@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import NavigationBar from './components/NavigationBar.vue';
 import Toolbar from './components/Toolbar.vue';
 import MainContent from './components/MainContent.vue';
+import type { FileItem } from './types/file';
 
 const mainContentRef = ref<InstanceType<typeof MainContent> | null>(null);
 
@@ -22,6 +23,13 @@ function handleError(message: string) {
   // 显示错误提示
   alert(message);
 }
+
+// 处理重命名
+function handleRename(item: FileItem) {
+  if (mainContentRef.value) {
+    mainContentRef.value.startRename(item);
+  }
+}
 </script>
 
 <template>
@@ -31,6 +39,7 @@ function handleError(message: string) {
       :selected-items="selectedItems"
       @paste-complete="handlePasteComplete"
       @error="handleError"
+      @rename="handleRename"
     />
     <MainContent ref="mainContentRef" />
   </div>

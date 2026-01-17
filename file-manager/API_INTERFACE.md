@@ -29,6 +29,7 @@
   - [4. check_path_exists - 检查路径是否存在](#4-check_path_exists---检查路径是否存在)
   - [5. cut_files - 剪切文件](#5-cut_files---剪切文件)
   - [6. copy_files - 复制文件](#6-copy_files---复制文件)
+  - [7. rename_file - 重命名文件](#7-rename_file---重命名文件)
 - [标签管理接口](#标签管理接口)
   - [7. get_most_used_tags - 获取使用数量最多的标签](#7-get_most_used_tags---获取使用数量最多的标签)
 - [示例命令](#示例命令)
@@ -681,9 +682,149 @@ pub async fn copy_files(paths: Vec<String>, target_path: String) -> Result<(), S
 
 ---
 
+### 7. rename_file - 重命名文件
+
+**功能描述**：将指定的文件或文件夹重命名为新名称。
+
+**接口名称**：`rename_file`
+
+**调用方式**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+await invoke('rename_file', {
+  oldPath: 'C:\\Users\\Username\\file.txt',
+  newName: 'newfile.txt'
+});
+```
+
+#### 请求参数
+
+**Rust 后端**：
+```rust
+#[tauri::command]
+pub async fn rename_file(old_path: String, new_name: String) -> Result<(), String>
+```
+
+**参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| `old_path` | `String` | 是 | 原文件/文件夹路径（Windows 路径格式） |
+| `new_name` | `String` | 是 | 新名称（不包含路径分隔符，仅文件名） |
+
+**TypeScript 前端**：
+```typescript
+interface RenameFileRequest {
+  old_path: string;
+  new_name: string;
+}
+```
+
+#### 返回数据
+
+**成功返回**：无返回值（`void`）
+
+**错误返回**：`String` 错误信息
+
+**常见错误**：
+- `"源路径不存在: {old_path}"` - 原文件/文件夹不存在
+- `"新名称不能包含路径分隔符: {new_name}"` - 新名称包含了 `/` 或 `\` 字符
+- `"新名称不能为空"` - 传入的新名称为空或仅空白字符
+- `"目标路径已存在: {new_path}"` - 目标位置已存在同名文件/文件夹
+- `"重命名失败 {old_path} -> {new_path}: {error}"` - 重命名操作失败
+
+#### 使用示例
+
+**前端调用**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+async function renameFile(oldPath: string, newName: string): Promise<void> {
+  try {
+    await invoke('rename_file', {
+      old_path: oldPath,
+      new_name: newName,
+    });
+    console.log('重命名成功');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('重命名失败:', errorMessage);
+    throw error;
+  }
+}
+
+// 使用示例：重命名文件
+await renameFile('C:\\Users\\Username\\file.txt', 'newfile.txt');
+
+// 使用示例：重命名文件夹
+await renameFile('C:\\Users\\Username\\folder', 'newfolder');
+```
+
+**后端实现** (`src-tauri/src/commands.rs`)：
+```rust
+#[tauri::command]
+pub async fn rename_file(old_path: String, new_name: String) -> Result<(), String> {
+    FileSystemService::rename_file(&old_path, &new_name)
+}
+```
+
+**后端服务实现** (`src-tauri/src/services/file_system.rs`)：
+```rust
+pub fn rename_file(old_path: &str, new_name: &str) -> Result<(), String> {
+    let source_path = Path::new(old_path);
+
+    // 检查源路径是否存在
+    if !source_path.exists() {
+        return Err(format!("源路径不存在: {}", old_path));
+    }
+
+    // 验证新名称是否有效（不能包含路径分隔符）
+    if new_name.contains('/') || new_name.contains('\\') {
+        return Err(format!("新名称不能包含路径分隔符: {}", new_name));
+    }
+
+    // 新名称不能为空
+    if new_name.trim().is_empty() {
+        return Err("新名称不能为空".to_string());
+    }
+
+    // 获取父目录
+    let parent_dir = source_path.parent()
+        .ok_or_else(|| format!("无法获取父目录: {}", old_path))?;
+
+    // 构建新路径
+    let new_path = parent_dir.join(new_name);
+
+    // 如果目标路径已存在，返回错误
+    if new_path.exists() {
+        return Err(format!("目标路径已存在: {}", new_path.display()));
+    }
+
+    // 重命名文件/文件夹
+    fs::rename(source_path, &new_path)
+        .map_err(|e| format!("重命名失败 {} -> {}: {}", old_path, new_path.display(), e))?;
+
+    Ok(())
+}
+```
+
+#### 注意事项
+
+1. **新名称格式**：`new_name` 只需要提供文件名部分，不需要完整路径。系统会自动使用原文件所在目录作为新文件的位置。
+2. **扩展名处理**：
+   - 文件重命名时，如果用户没有提供扩展名，前端会自动保留原扩展名
+   - 文件夹重命名时，直接使用提供的新名称
+3. **路径限制**：新名称不能包含路径分隔符（`/` 或 `\`），只能包含文件名和扩展名
+4. **目标冲突**：如果目标位置已存在同名文件/文件夹，操作会失败
+5. **权限要求**：需要对源路径所在目录有写入权限
+6. **使用场景**：主要用于工具栏重命名按钮，当选中单个文件或文件夹时，点击重命名按钮后，文件名显示区域会变为输入框，用户修改名称后按回车键完成重命名
+
+---
+
 ## 标签管理接口
 
-### 7. get_tag_list - 获取标签列表
+### 8. get_tag_list - 获取标签列表
 
 **功能描述**：根据指定排序模式获取标签列表，可按使用次数或最近更新时间排序。用于在工具栏标签面板中显示常用或最近使用的标签。
 
@@ -745,7 +886,7 @@ interface GetTagListRequest {
 - `"获取数据库连接失败: {error}"` - 无法获取数据库连接
 - `"查询标签失败: {error}"` - 数据库查询失败
 
-### 8. create_tag - 创建新标签
+### 9. create_tag - 创建新标签
 
 **功能描述**：根据给定名称创建一个新的标签，其它字段使用数据库默认值。用于在标签工具栏中快速新建标签。
 
@@ -890,7 +1031,7 @@ pub async fn get_most_used_tags(
 
 ## 示例命令
 
-### 8. greet - 问候命令
+### 10. greet - 问候命令
 
 **功能描述**：示例命令，用于测试前后端通信是否正常。
 
@@ -1116,7 +1257,10 @@ export interface DirectoryInfo {
             commands::list_drives,
             commands::check_path_exists,
             commands::cut_files,
-            commands::copy_files
+            commands::copy_files,
+            commands::rename_file,
+            commands::get_tag_list,
+            commands::create_tag
         ])
 ```
 
@@ -1256,6 +1400,12 @@ export interface Tag {
 ---
 
 ## 📅 版本记录
+
+### v1.5.0 (2025-12-XX)
+- 添加 `rename_file` 接口，支持重命名文件/文件夹
+- 工具栏添加重命名按钮，仅当选中单个文件/文件夹时启用
+- 文件列表支持编辑模式，文件名显示区域可切换为输入框
+- 优化重命名交互：按回车键完成重命名，点击其他区域或按 Esc 键取消
 
 ### v1.4.0 (2025-12-XX)
 - 添加 `get_tag_list` 接口，支持获取使用数量最多的标签和最近使用的标签

@@ -10,7 +10,16 @@
   >
     <div class="item-cell name-cell">
       <span class="item-icon">{{ iconChar }}</span>
-      <span class="item-name">{{ item.name }}</span>
+      <span v-if="!isEditing" class="item-name">{{ item.name }}</span>
+      <input
+        v-else
+        ref="nameInputRef"
+        v-model="editingName"
+        class="item-name-input"
+        @keyup.enter="handleRenameComplete"
+        @keyup.esc="handleRenameCancel"
+        @blur="handleRenameCancel"
+      />
     </div>
     <div class="item-cell date-cell">
       {{ formattedDate }}
@@ -25,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted } from 'vue';
+import { computed, ref, watch, nextTick, onUnmounted } from 'vue';
 import type { FileItem } from '../types/file';
 import { formatFileSize, formatDate, getFileTypeName } from '../utils/formatters';
 import { getIconChar, getFileIcon } from '../utils/icons';
@@ -33,12 +42,18 @@ import { getIconChar, getFileIcon } from '../utils/icons';
 const props = defineProps<{
   item: FileItem;
   isSelected?: boolean;
+  isEditing?: boolean;
 }>();
 
 const emit = defineEmits<{
   click: [item: FileItem, event: MouseEvent];
   dblclick: [item: FileItem];
+  'rename-complete': [itemId: string, newName: string];
 }>();
+
+// 编辑相关状态
+const editingName = ref('');
+const nameInputRef = ref<HTMLInputElement | null>(null);
 
 const iconChar = computed(() => {
   return getIconChar(getFileIcon(props.item));
@@ -58,6 +73,83 @@ const formattedDate = computed(() => {
 const typeName = computed(() => {
   return getFileTypeName(props.item);
 });
+
+// 监听编辑状态变化
+watch(() => props.isEditing, (newValue) => {
+  if (newValue) {
+    // 进入编辑模式：设置初始值为当前文件名（不含扩展名），并聚焦输入框
+    editingName.value = getFileNameWithoutExtension(props.item.name);
+    nextTick(() => {
+      nameInputRef.value?.focus();
+      nameInputRef.value?.select(); // 选中文本，方便直接修改
+    });
+  } else {
+    // 退出编辑模式：清空编辑内容
+    editingName.value = '';
+  }
+});
+
+// 获取不含扩展名的文件名
+function getFileNameWithoutExtension(fileName: string): string {
+  const lastDotIndex = fileName.lastIndexOf('.');
+  if (lastDotIndex === -1) {
+    return fileName; // 没有扩展名
+  }
+  // 如果是文件夹或者第一个字符就是点（隐藏文件），返回完整文件名
+  if (props.item.file_type === 'folder' || fileName.startsWith('.')) {
+    return fileName;
+  }
+  return fileName.substring(0, lastDotIndex);
+}
+
+// 获取文件扩展名
+function getFileExtension(fileName: string): string {
+  const lastDotIndex = fileName.lastIndexOf('.');
+  if (lastDotIndex === -1 || lastDotIndex === 0) {
+    return ''; // 没有扩展名或隐藏文件
+  }
+  return fileName.substring(lastDotIndex);
+}
+
+// 处理重命名完成
+function handleRenameComplete() {
+  const trimmedName = editingName.value.trim();
+  
+  // 如果名称为空，取消重命名
+  if (!trimmedName) {
+    handleRenameCancel();
+    return;
+  }
+
+  // 如果是文件，需要保留扩展名
+  let finalName = trimmedName;
+  if (props.item.file_type === 'file' && props.item.extension) {
+    // 检查用户输入是否已包含扩展名
+    const extension = getFileExtension(trimmedName);
+    if (!extension) {
+      // 用户没有输入扩展名，添加原来的扩展名
+      finalName = trimmedName + '.' + props.item.extension;
+    } else {
+      // 用户已经输入了扩展名，直接使用
+      finalName = trimmedName;
+    }
+  }
+
+  // 如果名称没有变化，不触发重命名
+  if (finalName === props.item.name) {
+    emit('rename-complete', props.item.id, '');
+    return;
+  }
+
+  // 触发重命名完成事件
+  emit('rename-complete', props.item.id, finalName);
+}
+
+// 处理重命名取消
+function handleRenameCancel() {
+  // 通过发送空字符串来取消编辑
+  emit('rename-complete', props.item.id, '');
+}
 
 // 用于防止双击时触发选中操作
 let lastClickTime = 0;
@@ -151,6 +243,23 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.item-name-input {
+  flex: 1;
+  padding: 2px 4px;
+  border: 1px solid #2196f3;
+  border-radius: 2px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  background-color: #ffffff;
+  color: #212121;
+}
+
+.item-name-input:focus {
+  border-color: #1976d2;
+  box-shadow: 0 0 0 1px rgba(33, 150, 243, 0.2);
 }
 
 .date-cell {

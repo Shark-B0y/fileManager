@@ -478,6 +478,52 @@ impl FileSystemService {
         Ok(())
     }
 
+    /// 重命名文件或文件夹
+    ///
+    /// # 参数
+    /// - `old_path`: 原文件/文件夹路径
+    /// - `new_name`: 新名称
+    ///
+    /// # 返回
+    /// - `Ok(())`: 操作成功
+    /// - `Err(String)`: 错误信息
+    pub fn rename_file(old_path: &str, new_name: &str) -> Result<(), String> {
+        let source_path = Path::new(old_path);
+
+        // 检查源路径是否存在
+        if !source_path.exists() {
+            return Err(format!("源路径不存在: {}", old_path));
+        }
+
+        // 验证新名称是否有效（不能包含路径分隔符）
+        if new_name.contains('/') || new_name.contains('\\') {
+            return Err(format!("新名称不能包含路径分隔符: {}", new_name));
+        }
+
+        // 新名称不能为空
+        if new_name.trim().is_empty() {
+            return Err("新名称不能为空".to_string());
+        }
+
+        // 获取父目录
+        let parent_dir = source_path.parent()
+            .ok_or_else(|| format!("无法获取父目录: {}", old_path))?;
+
+        // 构建新路径
+        let new_path = parent_dir.join(new_name);
+
+        // 如果目标路径已存在，返回错误
+        if new_path.exists() {
+            return Err(format!("目标路径已存在: {}", new_path.display()));
+        }
+
+        // 重命名文件/文件夹
+        fs::rename(source_path, &new_path)
+            .map_err(|e| format!("重命名失败 {} -> {}: {}", old_path, new_path.display(), e))?;
+
+        Ok(())
+    }
+
     /// 格式化时间为 ISO 8601 格式
     ///
     /// # 参数
