@@ -65,6 +65,29 @@
 
       <div class="toolbar-group toolbar-group-right">
         <button
+          class="toolbar-button view-toggle-button"
+          @click="toggleViewMode"
+          @mouseenter="hoveredButton = 'viewToggle'"
+          @mouseleave="hoveredButton = null"
+        >
+          <img
+            v-if="viewMode === 'icon'"
+            src="../assets/icon/list.svg"
+            alt="切换到列表视图"
+            class="icon"
+          />
+          <img
+            v-else
+            src="../assets/icon/symbol.svg"
+            alt="切换到图标视图"
+            class="icon"
+          />
+          <span v-if="hoveredButton === 'viewToggle'" class="tooltip">
+            {{ viewMode === 'list' ? '切换到图标视图' : '切换到列表视图' }}
+          </span>
+        </button>
+
+        <button
           class="toolbar-button tag-button"
           :class="{ active: isTagPanelExpanded }"
           @click="toggleTagPanel"
@@ -150,7 +173,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { useClipboard } from '../composables/useClipboard';
 import { useFileSystem } from '../composables/useFileSystem';
@@ -171,7 +194,27 @@ const emit = defineEmits<{
 const { clipboardData, setCut, setCopy, hasData, clear } = useClipboard();
 const { currentPath, refresh } = useFileSystem();
 
-const hoveredButton = ref<'cut' | 'copy' | 'paste' | 'rename' | 'delete' | 'tag' | null>(null);
+const hoveredButton = ref<'cut' | 'copy' | 'paste' | 'rename' | 'delete' | 'tag' | 'viewToggle' | null>(null);
+const viewMode = ref<'list' | 'icon'>('list');
+
+// 切换视图模式
+function toggleViewMode() {
+  viewMode.value = viewMode.value === 'list' ? 'icon' : 'list';
+  window.dispatchEvent(new CustomEvent('toggle-view-mode'));
+}
+
+// 监听视图模式变更（从MainContent同步）
+function handleViewModeChange(event: CustomEvent) {
+  viewMode.value = event.detail.mode;
+}
+
+onMounted(() => {
+  window.addEventListener('view-mode-changed', handleViewModeChange as EventListener);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('view-mode-changed', handleViewModeChange as EventListener);
+});
 const isTagPanelExpanded = ref(false);
 const mostUsedTags = ref<Tag[]>([]);
 const loadingTags = ref(false);

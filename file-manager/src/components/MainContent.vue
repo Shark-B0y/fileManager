@@ -10,8 +10,20 @@
     </div>
 
     <FileList
-      v-else-if="directoryInfo"
+      v-else-if="directoryInfo && viewMode === 'list'"
       ref="fileListRef"
+      :items="directoryInfo.items"
+      :selected-item-ids="selectedItemIds"
+      :editing-item-id="editingItemId"
+      @item-click="handleItemClick"
+      @item-double-click="handleItemDoubleClick"
+      @selection-change="handleSelectionChange"
+      @rename-complete="handleRenameComplete"
+    />
+
+    <IconView
+      v-else-if="directoryInfo && viewMode === 'icon'"
+      ref="iconViewRef"
       :items="directoryInfo.items"
       :selected-item-ids="selectedItemIds"
       :editing-item-id="editingItemId"
@@ -31,7 +43,28 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useFileSystem } from '../composables/useFileSystem';
 import FileList from './FileList.vue';
+import IconView from './IconView.vue';
 import type { FileItem } from '../types/file';
+
+// 视图模式：'list' 或 'icon'
+const viewMode = ref<'list' | 'icon'>('list');
+
+// 监听视图切换事件
+function handleViewModeToggle() {
+  viewMode.value = viewMode.value === 'list' ? 'icon' : 'list';
+  // 通知其他组件视图模式已变更
+  window.dispatchEvent(new CustomEvent('view-mode-changed', {
+    detail: { mode: viewMode.value }
+  }));
+}
+
+onMounted(() => {
+  window.addEventListener('toggle-view-mode', handleViewModeToggle);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('toggle-view-mode', handleViewModeToggle);
+});
 
 const {
   directoryInfo,
@@ -50,8 +83,9 @@ const selectedItemIds = ref<Set<string>>(new Set());
 // 正在编辑的文件项 ID
 const editingItemId = ref<string | null>(null);
 
-// FileList 组件引用
+// FileList 和 IconView 组件引用
 const fileListRef = ref<InstanceType<typeof FileList> | null>(null);
+const iconViewRef = ref<InstanceType<typeof IconView> | null>(null);
 
 // 监听目录变化，清除选中状态
 watch(directoryInfo, () => {
@@ -170,8 +204,10 @@ function handleSearchEvent(event: CustomEvent) {
 
     // 滚动到该文件
     nextTick(() => {
-      if (fileListRef.value) {
+      if (viewMode.value === 'list' && fileListRef.value) {
         fileListRef.value.scrollToItem(result.id);
+      } else if (viewMode.value === 'icon' && iconViewRef.value) {
+        iconViewRef.value.scrollToItem(result.id);
       }
     });
   } else {
@@ -198,13 +234,16 @@ const selectedItems = computed(() => {
 // 暴露方法和数据给父组件
 defineExpose({
   scrollToItem: (itemId: string) => {
-    if (fileListRef.value) {
+    if (viewMode.value === 'list' && fileListRef.value) {
       fileListRef.value.scrollToItem(itemId);
+    } else if (viewMode.value === 'icon' && iconViewRef.value) {
+      iconViewRef.value.scrollToItem(itemId);
     }
   },
   selectedItemIds,
   selectedItems,
   startRename,
+  viewMode,
 });
 
 // 初始化
