@@ -45,6 +45,40 @@ impl TagService {
         }
     }
 
+    /// 搜索标签
+    ///
+    /// 根据关键词搜索包含该文字的标签名称（模糊匹配）
+    ///
+    /// # 参数
+    /// - `db`: 全局数据库实例
+    /// - `keyword`: 搜索关键词
+    /// - `limit`: 返回的标签数量限制，默认为 50
+    ///
+    /// # 返回
+    /// - `Ok(Vec<Tag>)`: 匹配的标签列表
+    /// - `Err(String)`: 错误信息
+    pub async fn search_tags(
+        db: &GlobalDatabase,
+        keyword: String,
+        limit: Option<i32>,
+    ) -> Result<Vec<Tag>, String> {
+        let connection = db
+            .get_connection()
+            .await
+            .map_err(|e| format!("获取数据库连接失败: {}", e))?;
+
+        let limit = limit.unwrap_or(10);
+
+        match connection {
+            DatabaseConnectionRef::Postgres(pool) => {
+                Self::search_tags_postgres(&pool, &keyword, limit).await
+            }
+            DatabaseConnectionRef::Sqlite(pool) => {
+                Self::search_tags_sqlite(&pool, &keyword, limit).await
+            }
+        }
+    }
+
     /// 创建新标签
     ///
     /// # 参数
@@ -161,6 +195,106 @@ impl TagService {
             .fetch_all(pool)
             .await
             .map_err(|e| format!("查询标签失败: {}", e))?;
+
+        let mut tags = Vec::new();
+        for row in rows {
+            tags.push(Tag {
+                id: row.get("id"),
+                name: row.get("name"),
+                color: row.get("color"),
+                font_color: row.get("font_color"),
+                parent_id: row.get("parent_id"),
+                usage_count: row.get("usage_count"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            });
+        }
+
+        Ok(tags)
+    }
+
+    /// PostgreSQL 实现：搜索标签
+    async fn search_tags_postgres(
+        pool: &Pool<Postgres>,
+        keyword: &str,
+        limit: i32,
+    ) -> Result<Vec<Tag>, String> {
+        let query = format!(
+            r#"
+            SELECT
+                id,
+                name,
+                color,
+                font_color,
+                parent_id,
+                usage_count,
+                TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
+                TO_CHAR(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as updated_at
+            FROM tags
+            WHERE deleted_at IS NULL
+            AND name ILIKE $1
+            ORDER BY usage_count DESC, id ASC
+            LIMIT $2
+            "#
+        );
+
+        let search_pattern = format!("%{}%", keyword);
+        let rows = sqlx::query(&query)
+            .bind(&search_pattern)
+            .bind(limit)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("搜索标签失败: {}", e))?;
+
+        let mut tags = Vec::new();
+        for row in rows {
+            tags.push(Tag {
+                id: row.get("id"),
+                name: row.get("name"),
+                color: row.get("color"),
+                font_color: row.get("font_color"),
+                parent_id: row.get("parent_id"),
+                usage_count: row.get("usage_count"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            });
+        }
+
+        Ok(tags)
+    }
+
+    /// SQLite 实现：搜索标签
+    async fn search_tags_sqlite(
+        pool: &Pool<Sqlite>,
+        keyword: &str,
+        limit: i32,
+    ) -> Result<Vec<Tag>, String> {
+        let query = format!(
+            r#"
+            SELECT
+                id,
+                name,
+                color,
+                font_color,
+                parent_id,
+                usage_count,
+                datetime(created_at) as created_at,
+                datetime(updated_at) as updated_at
+            FROM tags
+            WHERE deleted_at IS NULL
+            AND name LIKE ?1
+            ORDER BY usage_count DESC, id ASC
+            LIMIT ?2
+            "#
+        );
+
+        let search_pattern = format!("%{}%", keyword);
+        let rows = sqlx::query(&query)
+            .bind(&search_pattern)
+            .bind(limit)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("搜索标签失败: {}", e))?;
 
         let mut tags = Vec::new();
         for row in rows {

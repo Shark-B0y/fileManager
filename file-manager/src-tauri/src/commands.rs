@@ -165,6 +165,27 @@ pub async fn get_tag_list(
     TagService::get_tag_list(&*db, limit, mode).await
 }
 
+/// 搜索标签
+///
+/// 根据关键词搜索包含该文字的标签名称（模糊匹配）
+///
+/// # 参数
+/// - `db`: 全局数据库实例
+/// - `keyword`: 搜索关键词
+/// - `limit`: 返回的标签数量限制，默认为 50
+///
+/// # 返回
+/// - `Ok(Vec<Tag>)`: 匹配的标签列表
+/// - `Err(String)`: 错误信息
+#[tauri::command]
+pub async fn search_tags(
+    db: State<'_, GlobalDatabase>,
+    keyword: String,
+    limit: Option<i32>,
+) -> Result<Vec<Tag>, String> {
+    TagService::search_tags(&*db, keyword, limit).await
+}
+
 /// 创建新标签
 ///
 /// 使用指定名称创建一个新标签，其它字段使用数据库默认值：

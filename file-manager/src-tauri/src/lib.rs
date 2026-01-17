@@ -58,6 +58,7 @@ pub fn run() {
             commands::rename_file,
             commands::delete_files,
             commands::get_tag_list,
+            commands::search_tags,
             commands::create_tag
         ])
         .run(tauri::generate_context!())

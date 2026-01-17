@@ -119,6 +119,22 @@
             />
           </div>
         </div>
+        <div class="tag-search-wrapper">
+          <button class="tag-search-button" @click.stop="toggleSearchTagInput">
+            <img src="../assets/icon/find.svg" alt="搜索标签" class="tag-search-icon" />
+          </button>
+          <div v-if="showSearchTagInput" class="tag-search-input-wrapper">
+            <input
+              ref="searchTagInputRef"
+              v-model="searchTagKeyword"
+              class="tag-search-input"
+              type="text"
+              placeholder="输入搜索关键词后回车"
+              @keyup.enter="handleSearchTags"
+              @blur="hideSearchTagInput"
+            />
+          </div>
+        </div>
         <div
           ref="tagListContainer"
           class="tag-list-scroll"
@@ -227,6 +243,9 @@ const dragStartScrollLeft = ref(0);
 const showAddTagInput = ref(false);
 const newTagName = ref('');
 const addTagInputRef = ref<HTMLInputElement | null>(null);
+const showSearchTagInput = ref(false);
+const searchTagKeyword = ref('');
+const searchTagInputRef = ref<HTMLInputElement | null>(null);
 
 // 是否可以剪切或复制（有选中项时可用）
 const canCutOrCopy = computed(() => {
@@ -378,6 +397,53 @@ function hideAddTagInput() {
   // 失焦时如果没有内容就直接关闭
   if (!newTagName.value.trim()) {
     showAddTagInput.value = false;
+  }
+}
+
+function toggleSearchTagInput() {
+  showSearchTagInput.value = !showSearchTagInput.value;
+  if (showSearchTagInput.value) {
+    searchTagKeyword.value = '';
+    // 下一帧聚焦输入框
+    requestAnimationFrame(() => {
+      searchTagInputRef.value?.focus();
+    });
+  }
+}
+
+function hideSearchTagInput() {
+  // 失焦时如果没有内容就直接关闭
+  if (!searchTagKeyword.value.trim()) {
+    showSearchTagInput.value = false;
+  }
+}
+
+async function handleSearchTags() {
+  const keyword = searchTagKeyword.value.trim();
+  if (!keyword) {
+    window.dispatchEvent(
+      new CustomEvent('show-global-error', {
+        detail: { message: '搜索关键词不能为空' },
+      }),
+    );
+    return;
+  }
+
+  try {
+    loadingTags.value = true;
+    const tags = await invoke<Tag[]>('search_tags', {
+      keyword: keyword,
+      limit: 50,
+    });
+    mostUsedTags.value = tags;
+    // 搜索成功后关闭输入框
+    showSearchTagInput.value = false;
+    searchTagKeyword.value = '';
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emit('error', `搜索标签失败: ${message}`);
+  } finally {
+    loadingTags.value = false;
   }
 }
 
@@ -617,6 +683,61 @@ async function loadTagList() {
 }
 
 .tag-add-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
+}
+
+.tag-search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-right: 4px;
+}
+
+.tag-search-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-color: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tag-search-button:hover {
+  background-color: #f0f0f0;
+}
+
+.tag-search-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.tag-search-input-wrapper {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 4px;
+  padding: 4px 6px;
+  background-color: #ffffff;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  z-index: 110;
+}
+
+.tag-search-input {
+  width: 140px;
+  padding: 4px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+}
+
+.tag-search-input:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
 }

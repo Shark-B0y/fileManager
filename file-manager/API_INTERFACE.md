@@ -1008,7 +1008,83 @@ interface GetTagListRequest {
 - `"获取数据库连接失败: {error}"` - 无法获取数据库连接
 - `"查询标签失败: {error}"` - 数据库查询失败
 
-### 10. create_tag - 创建新标签
+### 10. search_tags - 搜索标签
+
+**功能描述**：根据关键词搜索包含该文字的标签名称（模糊匹配）。用于在标签工具栏中快速查找标签。
+
+**接口名称**：`search_tags`
+
+**调用方式**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+const searchResults = await invoke<Tag[]>('search_tags', {
+  keyword: '旅游',
+  limit: 50,
+});
+```
+
+#### 请求参数
+
+**Rust 后端**：
+```rust
+#[tauri::command]
+pub async fn search_tags(
+    db: State<'_, GlobalDatabase>,
+    keyword: String,
+    limit: Option<i32>,
+) -> Result<Vec<Tag>, String>
+```
+
+**参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| `keyword` | `String` | 是 | 搜索关键词（标签名称中包含该文字即匹配） |
+| `limit`  | `Option<i32>` | 否 | 返回的标签数量限制，默认为 50 |
+
+**TypeScript 前端**：
+```typescript
+interface SearchTagsRequest {
+  keyword: string;
+  limit?: number;
+}
+```
+
+#### 返回数据
+
+**成功返回**：`Tag[]` 匹配的标签数组（按使用次数降序排列）
+
+**错误返回**：`String` 错误信息
+
+**常见错误**：
+- `"获取数据库连接失败: {error}"` - 无法获取数据库连接
+- `"搜索标签失败: {error}"` - 数据库查询失败
+
+#### 数据结构
+
+返回的数据结构与 `get_tag_list` 相同，参见 [Tag - 标签](#tag---标签) 数据结构定义。
+
+#### 使用示例
+
+```typescript
+// 搜索包含"旅游"的标签
+const tags = await invoke<Tag[]>('search_tags', {
+  keyword: '旅游',
+  limit: 50,
+});
+
+// 搜索结果会包含名称中包含"旅游"的所有标签
+// 例如："旅游"、"旅游/日本"、"我的旅游照片" 等
+```
+
+#### 注意事项
+
+1. **模糊匹配**：搜索使用 SQL 的 `LIKE`（SQLite）或 `ILIKE`（PostgreSQL，大小写不敏感）进行模糊匹配
+2. **排序规则**：结果按 `usage_count` 降序排列，使用次数多的标签排在前面
+3. **空关键词**：如果关键词为空，将返回空数组
+
+### 11. create_tag - 创建新标签
 
 **功能描述**：根据给定名称创建一个新的标签，其它字段使用数据库默认值。用于在标签工具栏中快速新建标签。
 
@@ -1383,6 +1459,7 @@ export interface DirectoryInfo {
             commands::rename_file,
             commands::delete_files,
             commands::get_tag_list,
+            commands::search_tags,
             commands::create_tag
         ])
 ```
