@@ -421,4 +421,375 @@ impl TagService {
             updated_at: row.get("updated_at"),
         })
     }
+
+    /// 修改标签
+    ///
+    /// # 参数
+    /// - `db`: 全局数据库实例
+    /// - `id`: 标签ID
+    /// - `name`: 新标签名称（可选）
+    /// - `color`: 新背景颜色（可选，None表示不修改）
+    /// - `font_color`: 新字体颜色（可选，None表示不修改）
+    /// - `parent_id`: 新父标签ID（可选，None表示不修改）
+    ///
+    /// # 返回
+    /// - `Ok(Tag)`: 修改后的标签
+    /// - `Err(String)`: 错误信息
+    pub async fn modify_tag(
+        db: &GlobalDatabase,
+        id: i32,
+        name: Option<String>,
+        color: Option<Option<String>>,
+        font_color: Option<Option<String>>,
+        parent_id: Option<Option<i32>>,
+    ) -> Result<Tag, String> {
+        let connection = db
+            .get_connection()
+            .await
+            .map_err(|e| format!("获取数据库连接失败: {}", e))?;
+
+        match connection {
+            DatabaseConnectionRef::Postgres(pool) => {
+                Self::modify_tag_postgres(&pool, id, name, color, font_color, parent_id).await
+            }
+            DatabaseConnectionRef::Sqlite(pool) => {
+                Self::modify_tag_sqlite(&pool, id, name, color, font_color, parent_id).await
+            }
+        }
+    }
+
+    /// PostgreSQL 实现：修改标签
+    async fn modify_tag_postgres(
+        pool: &Pool<Postgres>,
+        id: i32,
+        name: Option<String>,
+        color: Option<Option<String>>,
+        font_color: Option<Option<String>>,
+        parent_id: Option<Option<i32>>,
+    ) -> Result<Tag, String> {
+        // 检查标签是否存在
+        let exists_row = sqlx::query(
+            r#"
+            SELECT 1
+            FROM tags
+            WHERE id = $1 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("检查标签是否存在失败: {}", e))?;
+
+        if exists_row.is_none() {
+            return Err(format!("标签 ID {} 不存在", id));
+        }
+
+        // 如果提供了新名称，检查是否与其他标签重复
+        if let Some(ref new_name) = name {
+            let trimmed_name = new_name.trim();
+            if trimmed_name.is_empty() {
+                return Err("标签名称不能为空".to_string());
+            }
+
+            let exists_row = sqlx::query(
+                r#"
+                SELECT 1
+                FROM tags
+                WHERE name = $1 AND id != $2 AND deleted_at IS NULL
+                "#,
+            )
+            .bind(trimmed_name)
+            .bind(id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| format!("检查标签名称是否重复失败: {}", e))?;
+
+            if exists_row.is_some() {
+                return Err(format!("标签 \"{}\" 已存在", trimmed_name));
+            }
+        }
+
+        // 构建更新语句
+        let mut update_fields = Vec::new();
+        let mut bind_index = 1;
+
+        if let Some(ref new_name) = name {
+            update_fields.push(format!("name = ${}", bind_index));
+            bind_index += 1;
+        }
+
+        if let Some(color_opt) = &color {
+            update_fields.push(format!("color = ${}", bind_index));
+            bind_index += 1;
+        }
+
+        if let Some(font_color_opt) = &font_color {
+            update_fields.push(format!("font_color = ${}", bind_index));
+            bind_index += 1;
+        }
+
+        if let Some(parent_id_opt) = &parent_id {
+            update_fields.push(format!("parent_id = ${}", bind_index));
+            bind_index += 1;
+        }
+
+        if update_fields.is_empty() {
+            // 如果没有要更新的字段，直接返回当前标签
+            return Self::get_tag_by_id_postgres(pool, id).await;
+        }
+
+        // 添加updated_at字段
+        update_fields.push(format!("updated_at = CURRENT_TIMESTAMP"));
+
+        let query = format!(
+            r#"
+            UPDATE tags
+            SET {}
+            WHERE id = ${}
+            RETURNING
+                id,
+                name,
+                color,
+                font_color,
+                parent_id,
+                usage_count,
+                TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
+                TO_CHAR(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as updated_at
+            "#,
+            update_fields.join(", "),
+            bind_index
+        );
+
+        let mut query_builder = sqlx::query(&query);
+
+        if let Some(ref new_name) = name {
+            query_builder = query_builder.bind(new_name.trim());
+        }
+
+        if let Some(color_opt) = &color {
+            query_builder = query_builder.bind(color_opt.as_ref().map(|s| s.as_str()));
+        }
+
+        if let Some(font_color_opt) = &font_color {
+            query_builder = query_builder.bind(font_color_opt.as_ref().map(|s| s.as_str()));
+        }
+
+        if let Some(parent_id_opt) = &parent_id {
+            query_builder = query_builder.bind(parent_id_opt.as_ref());
+        }
+
+        query_builder = query_builder.bind(id);
+
+        let row = query_builder
+            .fetch_one(pool)
+            .await
+            .map_err(|e| format!("修改标签失败: {}", e))?;
+
+        Ok(Tag {
+            id: row.get("id"),
+            name: row.get("name"),
+            color: row.get("color"),
+            font_color: row.get("font_color"),
+            parent_id: row.get("parent_id"),
+            usage_count: row.get("usage_count"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+    }
+
+    /// SQLite 实现：修改标签
+    async fn modify_tag_sqlite(
+        pool: &Pool<Sqlite>,
+        id: i32,
+        name: Option<String>,
+        color: Option<Option<String>>,
+        font_color: Option<Option<String>>,
+        parent_id: Option<Option<i32>>,
+    ) -> Result<Tag, String> {
+        // 检查标签是否存在
+        let exists_row = sqlx::query(
+            r#"
+            SELECT 1
+            FROM tags
+            WHERE id = ?1 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("检查标签是否存在失败: {}", e))?;
+
+        if exists_row.is_none() {
+            return Err(format!("标签 ID {} 不存在", id));
+        }
+
+        // 如果提供了新名称，检查是否与其他标签重复
+        if let Some(ref new_name) = name {
+            let trimmed_name = new_name.trim();
+            if trimmed_name.is_empty() {
+                return Err("标签名称不能为空".to_string());
+            }
+
+            let exists_row = sqlx::query(
+                r#"
+                SELECT 1
+                FROM tags
+                WHERE name = ?1 AND id != ?2 AND deleted_at IS NULL
+                "#,
+            )
+            .bind(trimmed_name)
+            .bind(id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| format!("检查标签名称是否重复失败: {}", e))?;
+
+            if exists_row.is_some() {
+                return Err(format!("标签 \"{}\" 已存在", trimmed_name));
+            }
+        }
+
+        // 构建更新语句
+        let mut update_fields = Vec::new();
+        let mut bind_index = 1;
+
+        if let Some(ref new_name) = name {
+            update_fields.push(format!("name = ?{}", bind_index));
+            bind_index += 1;
+        }
+
+        if let Some(_) = &color {
+            update_fields.push(format!("color = ?{}", bind_index));
+            bind_index += 1;
+        }
+
+        if let Some(_) = &font_color {
+            update_fields.push(format!("font_color = ?{}", bind_index));
+            bind_index += 1;
+        }
+
+        if let Some(_) = &parent_id {
+            update_fields.push(format!("parent_id = ?{}", bind_index));
+            bind_index += 1;
+        }
+
+        if update_fields.is_empty() {
+            // 如果没有要更新的字段，直接返回当前标签
+            return Self::get_tag_by_id_sqlite(pool, id).await;
+        }
+
+        // 添加updated_at字段
+        update_fields.push("updated_at = CURRENT_TIMESTAMP".to_string());
+
+        let query = format!(
+            r#"
+            UPDATE tags
+            SET {}
+            WHERE id = ?{}
+            "#,
+            update_fields.join(", "),
+            bind_index
+        );
+
+        let mut query_builder = sqlx::query(&query);
+
+        if let Some(ref new_name) = name {
+            query_builder = query_builder.bind(new_name.trim());
+        }
+
+        if let Some(color_opt) = &color {
+            query_builder = query_builder.bind(color_opt.as_ref().map(|s| s.as_str()));
+        }
+
+        if let Some(font_color_opt) = &font_color {
+            query_builder = query_builder.bind(font_color_opt.as_ref().map(|s| s.as_str()));
+        }
+
+        if let Some(parent_id_opt) = &parent_id {
+            query_builder = query_builder.bind(parent_id_opt.as_ref());
+        }
+
+        query_builder = query_builder.bind(id);
+
+        query_builder
+            .execute(pool)
+            .await
+            .map_err(|e| format!("修改标签失败: {}", e))?;
+
+        // 返回更新后的标签
+        Self::get_tag_by_id_sqlite(pool, id).await
+    }
+
+    /// PostgreSQL 实现：根据ID获取标签
+    async fn get_tag_by_id_postgres(pool: &Pool<Postgres>, id: i32) -> Result<Tag, String> {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                id,
+                name,
+                color,
+                font_color,
+                parent_id,
+                usage_count,
+                TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
+                TO_CHAR(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as updated_at
+            FROM tags
+            WHERE id = $1 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("查询标签失败: {}", e))?;
+
+        match row {
+            Some(row) => Ok(Tag {
+                id: row.get("id"),
+                name: row.get("name"),
+                color: row.get("color"),
+                font_color: row.get("font_color"),
+                parent_id: row.get("parent_id"),
+                usage_count: row.get("usage_count"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            }),
+            None => Err(format!("标签 ID {} 不存在", id)),
+        }
+    }
+
+    /// SQLite 实现：根据ID获取标签
+    async fn get_tag_by_id_sqlite(pool: &Pool<Sqlite>, id: i32) -> Result<Tag, String> {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                id,
+                name,
+                color,
+                font_color,
+                parent_id,
+                usage_count,
+                datetime(created_at) as created_at,
+                datetime(updated_at) as updated_at
+            FROM tags
+            WHERE id = ?1 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("查询标签失败: {}", e))?;
+
+        match row {
+            Some(row) => Ok(Tag {
+                id: row.get("id"),
+                name: row.get("name"),
+                color: row.get("color"),
+                font_color: row.get("font_color"),
+                parent_id: row.get("parent_id"),
+                usage_count: row.get("usage_count"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            }),
+            None => Err(format!("标签 ID {} 不存在", id)),
+        }
+    }
 }

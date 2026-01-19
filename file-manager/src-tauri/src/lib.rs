@@ -59,7 +59,8 @@ pub fn run() {
             commands::delete_files,
             commands::get_tag_list,
             commands::search_tags,
-            commands::create_tag
+            commands::create_tag,
+            commands::modify_tag
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

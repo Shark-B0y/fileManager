@@ -100,6 +100,14 @@
       </div>
     </div>
 
+    <!-- 修改标签弹窗 -->
+    <ModifyTagDialog
+      v-if="showModifyTagDialog"
+      :tag="selectedTag"
+      @close="closeModifyTagDialog"
+      @modified="handleTagModified"
+    />
+
     <!-- 标签面板展开区域 -->
     <div v-if="isTagPanelExpanded" class="tag-panel">
       <div class="tag-panel-row tags-row">
@@ -135,6 +143,11 @@
             />
           </div>
         </div>
+        <div class="tag-modify-wrapper">
+          <button class="tag-modify-button" @click.stop="openModifyTagDialog">
+            <img src="../assets/icon/modify.svg" alt="修改标签" class="tag-modify-icon" />
+          </button>
+        </div>
         <div
           ref="tagListContainer"
           class="tag-list-scroll"
@@ -149,10 +162,12 @@
               v-for="tag in mostUsedTags"
               :key="tag.id"
               class="tag-item"
+              :class="{ selected: selectedTag?.id === tag.id }"
               :style="{
                 backgroundColor: tag.color || '#FFFF00',
                 color: tag.font_color || '#000000'
               }"
+              @click="selectTagForModify(tag)"
             >
               {{ tag.name }}
             </div>
@@ -193,6 +208,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { useClipboard } from '../composables/useClipboard';
 import { useFileSystem } from '../composables/useFileSystem';
+import ModifyTagDialog from './ModifyTagDialog.vue';
 import type { FileItem } from '../types/file';
 import type { Tag } from '../types/tag';
 
@@ -246,6 +262,8 @@ const addTagInputRef = ref<HTMLInputElement | null>(null);
 const showSearchTagInput = ref(false);
 const searchTagKeyword = ref('');
 const searchTagInputRef = ref<HTMLInputElement | null>(null);
+const showModifyTagDialog = ref(false);
+const selectedTag = ref<Tag | null>(null);
 
 // 是否可以剪切或复制（有选中项时可用）
 const canCutOrCopy = computed(() => {
@@ -518,6 +536,43 @@ async function loadTagList() {
     loadingTags.value = false;
   }
 }
+
+// 选择要修改的标签
+function selectTagForModify(tag: Tag) {
+  selectedTag.value = tag;
+  showModifyTagDialog.value = true;
+}
+
+// 打开修改标签弹窗
+function openModifyTagDialog() {
+  // 如果没有选中的标签，提示用户先选择标签
+  if (!selectedTag.value) {
+    if (mostUsedTags.value.length === 0) {
+      window.dispatchEvent(
+        new CustomEvent('show-global-error', {
+          detail: { message: '没有可修改的标签' },
+        }),
+      );
+      return;
+    }
+    // 如果没有选中标签，默认选择第一个标签
+    selectedTag.value = mostUsedTags.value[0];
+  }
+  showModifyTagDialog.value = true;
+}
+
+// 关闭修改标签弹窗
+function closeModifyTagDialog() {
+  showModifyTagDialog.value = false;
+  selectedTag.value = null;
+}
+
+// 处理标签修改完成
+async function handleTagModified() {
+  // 重新加载标签列表
+  await loadTagList();
+  closeModifyTagDialog();
+}
 </script>
 
 <style scoped>
@@ -742,6 +797,35 @@ async function loadTagList() {
   box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.2);
 }
 
+.tag-modify-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-right: 4px;
+}
+
+.tag-modify-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-color: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tag-modify-button:hover {
+  background-color: #f0f0f0;
+}
+
+.tag-modify-icon {
+  width: 14px;
+  height: 14px;
+}
+
 .tag-list-scroll {
   flex: 1;
   overflow-x: auto;
@@ -823,6 +907,11 @@ async function loadTagList() {
 
 .tag-item:hover {
   opacity: 0.8;
+}
+
+.tag-item.selected {
+  border: 2px solid #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
 }
 
 .tag-empty,

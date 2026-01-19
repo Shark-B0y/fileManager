@@ -1225,6 +1225,153 @@ pub async fn get_most_used_tags(
 3. **默认限制**：如果不指定 `limit`，默认返回 10 个标签
 4. **时间格式**：`created_at` 和 `updated_at` 使用 ISO 8601 格式字符串
 
+### 12. modify_tag - 修改标签
+
+**功能描述**：修改指定标签的信息，可以修改标签名称、背景颜色、字体颜色和父级标签。用于在标签管理界面中编辑标签属性。
+
+**接口名称**：`modify_tag`
+
+**调用方式**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+import type { Tag } from '../types/tag';
+
+const modifiedTag = await invoke<Tag>('modify_tag', {
+  id: 1,
+  name: '新标签名',
+  color: '#FF0000',
+  font_color: '#FFFFFF',
+  parent_id: null,
+});
+```
+
+#### 请求参数
+
+**Rust 后端**：
+```rust
+#[tauri::command]
+pub async fn modify_tag(
+    db: State<'_, GlobalDatabase>,
+    id: i32,
+    name: Option<String>,
+    color: Option<Option<String>>,
+    font_color: Option<Option<String>>,
+    parent_id: Option<Option<i32>>,
+) -> Result<Tag, String>
+```
+
+**参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| `id` | `i32` | 是 | 要修改的标签ID |
+| `name` | `Option<String>` | 否 | 新标签名称（None表示不修改，Some("")会报错） |
+| `color` | `Option<Option<String>>` | 否 | 新背景颜色（None表示不修改，Some(None)表示设置为NULL，Some("#FF0000")表示设置为指定颜色） |
+| `font_color` | `Option<Option<String>>` | 否 | 新字体颜色（None表示不修改，Some(None)表示设置为NULL，Some("#FFFFFF")表示设置为指定颜色） |
+| `parent_id` | `Option<Option<i32>>` | 否 | 新父标签ID（None表示不修改，Some(None)表示设置为NULL，Some(123)表示设置为指定父标签） |
+
+**TypeScript 前端**：
+```typescript
+interface ModifyTagRequest {
+  id: number;
+  name?: string;
+  color?: string | null;  // null表示设置为NULL，undefined表示不修改
+  font_color?: string | null;  // null表示设置为NULL，undefined表示不修改
+  parent_id?: number | null;  // null表示设置为NULL，undefined表示不修改
+}
+```
+
+#### 返回数据
+
+**成功返回**：`Tag` 修改后的标签对象，字段与 `Tag` 数据结构一致。
+
+**错误返回**：`String` 错误信息
+
+**常见错误**：
+- `"标签 ID {id} 不存在"` - 指定的标签ID不存在或已被删除
+- `"标签名称不能为空"` - 传入的名称为空或仅空白字符
+- `"标签 \"{name}\" 已存在"` - 新名称与其他标签重复
+- `"获取数据库连接失败: {error}"` - 无法获取数据库连接
+- `"修改标签失败: {error}"` - 数据库更新失败
+
+#### 数据结构
+
+返回的数据结构与 `create_tag` 相同，参见 [Tag - 标签](#tag---标签) 数据结构定义。
+
+#### 使用示例
+
+**前端调用**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+import type { Tag } from '../types/tag';
+
+// 只修改标签名称
+const tag1 = await invoke<Tag>('modify_tag', {
+  id: 1,
+  name: '新标签名',
+});
+
+// 只修改背景颜色和字体颜色
+const tag2 = await invoke<Tag>('modify_tag', {
+  id: 1,
+  color: '#FF0000',
+  font_color: '#FFFFFF',
+});
+
+// 修改多个字段
+const tag3 = await invoke<Tag>('modify_tag', {
+  id: 1,
+  name: '新标签名',
+  color: '#FF0000',
+  font_color: '#FFFFFF',
+  parent_id: 2,
+});
+
+// 将颜色设置为NULL（使用null值）
+const tag4 = await invoke<Tag>('modify_tag', {
+  id: 1,
+  color: null,  // 设置为NULL
+  font_color: null,  // 设置为NULL
+});
+
+// 不修改颜色（不传color字段或传undefined）
+const tag5 = await invoke<Tag>('modify_tag', {
+  id: 1,
+  name: '新标签名',
+  // color和font_color不传，表示不修改
+});
+```
+
+**后端实现** (`src-tauri/src/commands.rs`)：
+```rust
+#[tauri::command]
+pub async fn modify_tag(
+    db: State<'_, GlobalDatabase>,
+    id: i32,
+    name: Option<String>,
+    color: Option<Option<String>>,
+    font_color: Option<Option<String>>,
+    parent_id: Option<Option<i32>>,
+) -> Result<Tag, String> {
+    TagService::modify_tag(&*db, id, name, color, font_color, parent_id).await
+}
+```
+
+#### 注意事项
+
+1. **字段修改规则**：
+   - 如果某个字段传入 `None`（TypeScript中为 `undefined`），表示不修改该字段
+   - 如果传入 `Some(None)`（TypeScript中为 `null`），表示将该字段设置为 `NULL`
+   - 如果传入 `Some(value)`（TypeScript中为具体值），表示将该字段设置为指定值
+
+2. **名称验证**：如果提供了新名称，系统会检查名称是否为空以及是否与其他标签重复
+
+3. **标签存在性**：修改前会检查标签是否存在，如果不存在会返回错误
+
+4. **自动更新时间**：修改标签时，`updated_at` 字段会自动更新为当前时间
+
+5. **颜色格式**：颜色值应使用 HEX 格式（如 `#FF0000`），但系统不会强制验证格式
+
 ---
 
 ## 示例命令

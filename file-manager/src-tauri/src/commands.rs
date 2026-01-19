@@ -209,6 +209,34 @@ pub async fn create_tag(
     TagService::create_tag(&*db, name).await
 }
 
+/// 修改标签
+///
+/// 修改指定标签的信息，可以修改标签名称、背景颜色、字体颜色和父级标签。
+/// 如果某个字段传入None，表示不修改该字段；如果传入Some(None)，表示将该字段设置为NULL。
+///
+/// # 参数
+/// - `db`: 全局数据库实例
+/// - `id`: 标签ID
+/// - `name`: 新标签名称（可选，None表示不修改）
+/// - `color`: 新背景颜色（可选，None表示不修改，Some(None)表示设置为NULL）
+/// - `font_color`: 新字体颜色（可选，None表示不修改，Some(None)表示设置为NULL）
+/// - `parent_id`: 新父标签ID（可选，None表示不修改，Some(None)表示设置为NULL）
+///
+/// # 返回
+/// - `Ok(Tag)`: 修改后的标签
+/// - `Err(String)`: 错误信息（标签不存在、名称重复等）
+#[tauri::command]
+pub async fn modify_tag(
+    db: State<'_, GlobalDatabase>,
+    id: i32,
+    name: Option<String>,
+    color: Option<Option<String>>,
+    font_color: Option<Option<String>>,
+    parent_id: Option<Option<i32>>,
+) -> Result<Tag, String> {
+    TagService::modify_tag(&*db, id, name, color, font_color, parent_id).await
+}
+
 /// 重命名文件或文件夹
 ///
 /// 将指定路径的文件或文件夹重命名为新名称
