@@ -1,5 +1,6 @@
 import { readFile } from '@tauri-apps/plugin-fs';
 import type { FileItem } from '../types/file';
+import { IMAGE_EXTENSIONS, MIME_TYPE_MAP, isExtensionInList } from './constants';
 
 type CacheEntry = {
   url: string;
@@ -7,7 +8,6 @@ type CacheEntry = {
 };
 
 const MAX_CACHE_ENTRIES = 200;
-const IMAGE_TEYP = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'];
 
 // path -> CacheEntry
 const thumbnailCache = new Map<string, CacheEntry>();
@@ -22,34 +22,18 @@ export function isImageFile(item: Pick<FileItem, 'file_type' | 'extension'>): bo
   if (item.file_type !== 'file' || !item.extension) {
     return false;
   }
-  const ext = item.extension.toLowerCase();
-  return IMAGE_TEYP.includes(ext);
+  return isExtensionInList(item.extension, IMAGE_EXTENSIONS);
 }
 
 /**
  * 根据扩展名推断 MIME 类型（用于 Blob 展示）。
  */
 export function getImageMimeType(extension?: string): string {
-  const ext = (extension || '').toLowerCase();
-  switch (ext) {
-    case 'jpg':
-    case 'jpeg':
-      return 'image/jpeg';
-    case 'png':
-      return 'image/png';
-    case 'gif':
-      return 'image/gif';
-    case 'bmp':
-      return 'image/bmp';
-    case 'webp':
-      return 'image/webp';
-    case 'svg':
-      return 'image/svg+xml';
-    case 'ico':
-      return 'image/x-icon';
-    default:
-      return 'application/octet-stream';
+  if (!extension) {
+    return 'application/octet-stream';
   }
+  const ext = extension.toLowerCase();
+  return MIME_TYPE_MAP[ext] || 'application/octet-stream';
 }
 
 function enforceCacheLimit() {
@@ -85,13 +69,13 @@ export async function getThumbnailUrl(path: string, extension?: string): Promise
 
   const task = (async () => {
     try {
-      console.log('[thumbnails] 开始读取文件:', path);
+    //   console.log('[thumbnails] 开始读取文件:', path);
       const bytes = await readFile(path);
-      console.log('[thumbnails] 文件读取成功，大小:', bytes.length, 'bytes');
+    //   console.log('[thumbnails] 文件读取成功，大小:', bytes.length, 'bytes');
       const mimeType = getImageMimeType(extension);
       const blob = new Blob([bytes], { type: mimeType });
       const url = URL.createObjectURL(blob);
-      console.log('[thumbnails] 生成 blob URL:', url);
+    //   console.log('[thumbnails] 生成 blob URL:', url);
       thumbnailCache.set(path, { url, createdAt: Date.now() });
       enforceCacheLimit();
       return url;

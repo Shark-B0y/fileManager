@@ -1,5 +1,7 @@
 // 格式化工具函数
 
+import { FILE_SIZE_UNITS, FILE_TYPE_NAME_MAP } from './constants';
+
 /**
  * 格式化文件大小
  * @param bytes 字节数
@@ -9,10 +11,9 @@ export function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
 
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${FILE_SIZE_UNITS[i]}`;
 }
 
 /**
@@ -86,26 +87,6 @@ export function getFileTypeName(item: { file_type: 'file' | 'folder'; extension?
   }
 
   const ext = item.extension.toLowerCase();
-  const typeMap: Record<string, string> = {
-    'txt': '文本文档',
-    'doc': 'Word 文档',
-    'docx': 'Word 文档',
-    'xls': 'Excel 表格',
-    'xlsx': 'Excel 表格',
-    'ppt': 'PowerPoint 演示文稿',
-    'pptx': 'PowerPoint 演示文稿',
-    'pdf': 'PDF 文档',
-    'jpg': 'JPEG 图像',
-    'jpeg': 'JPEG 图像',
-    'png': 'PNG 图像',
-    'gif': 'GIF 图像',
-    'mp4': 'MP4 视频',
-    'avi': 'AVI 视频',
-    'mp3': 'MP3 音频',
-    'zip': 'ZIP 压缩文件',
-    'rar': 'RAR 压缩文件',
-  };
-
-  return typeMap[ext] || `${ext.toUpperCase()} 文件`;
+  return FILE_TYPE_NAME_MAP[ext] || `${ext.toUpperCase()} 文件`;
 }
 
