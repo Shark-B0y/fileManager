@@ -167,7 +167,7 @@
                 backgroundColor: tag.color || '#FFFF00',
                 color: tag.font_color || '#000000'
               }"
-              @click="selectTagForModify(tag)"
+              @dblclick="selectTagForModify(tag)"
             >
               {{ tag.name }}
             </div>
@@ -537,7 +537,12 @@ async function loadTagList() {
   }
 }
 
-// 选择要修改的标签
+// 选择标签（单击，仅选中不打开对话框）
+function selectTag(tag: Tag) {
+  selectedTag.value = tag;
+}
+
+// 选择要修改的标签（双击，选中并打开对话框）
 function selectTagForModify(tag: Tag) {
   selectedTag.value = tag;
   showModifyTagDialog.value = true;
