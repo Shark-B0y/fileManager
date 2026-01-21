@@ -6,8 +6,10 @@
     @mousemove="handleMouseMove"
     @mouseup="handleMouseUp"
     @mouseleave="handleMouseLeave"
+    tabindex="0"
+    @keydown="handleKeyDown"
   >
-    <div class="icon-grid">
+    <div class="icon-grid" :style="gridStyle">
       <div
         v-for="item in items"
         :key="item.id"
@@ -20,15 +22,16 @@
         @click="(e) => handleItemClick(item, e)"
         @dblclick="() => handleItemDoubleClick(item)"
       >
-        <div class="icon-item-icon">
+        <div class="icon-item-icon" :style="iconStyle">
           <img
             v-if="getThumbnailForItem(item)"
             :src="getThumbnailForItem(item)"
             class="icon-item-thumbnail"
+            :style="thumbnailStyle"
             :alt="item.name"
             draggable="false"
           />
-          <span v-else>{{ iconChar(item) }}</span>
+          <span v-else :style="iconCharStyle">{{ iconChar(item) }}</span>
         </div>
         <div v-if="!isEditingItem(item.id)" class="icon-item-name">{{ item.name }}</div>
         <input
@@ -54,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, nextTick, onUnmounted, watch } from 'vue';
+import { computed, ref, nextTick, onUnmounted, onMounted, watch } from 'vue';
 import type { FileItem } from '../types/file';
 import { getIconChar, getFileIcon } from '../utils/icons';
 import { getThumbnailUrl, isImageFile } from '../utils/thumbnails';
@@ -83,6 +86,12 @@ const thumbnailUrls = ref<Map<string, string>>(new Map());
 
 // 输入框引用映射
 const inputRefs = ref<Map<string, HTMLInputElement>>(new Map());
+
+// 图标大小状态（像素值，控制单个文件项的宽度和图标大小）
+const iconSize = ref(120); // 默认 120px
+const MIN_ICON_SIZE = 80; // 最小尺寸
+const MAX_ICON_SIZE = 300; // 最大尺寸
+const ICON_SIZE_STEP = 20; // 每次调整的步长
 
 // 编辑相关状态
 const editingName = ref('');
@@ -266,6 +275,88 @@ function getThumbnailForItem(item: FileItem): string | undefined {
   }
   return val;
 }
+
+// 计算网格样式（动态调整列宽）
+const gridStyle = computed(() => {
+  return {
+    gridTemplateColumns: `repeat(auto-fill, minmax(${iconSize.value}px, 1fr))`,
+  };
+});
+
+// 计算图标容器样式
+const iconStyle = computed(() => {
+  const iconDimension = Math.min(iconSize.value - 32, 128); // 图标最大128px，但不超过容器宽度-32px
+  return {
+    width: `${iconDimension}px`,
+    height: `${iconDimension}px`,
+  };
+});
+
+// 计算缩略图样式
+const thumbnailStyle = computed(() => {
+  const iconDimension = Math.min(iconSize.value - 32, 128);
+  return {
+    width: `${iconDimension}px`,
+    height: `${iconDimension}px`,
+  };
+});
+
+// 计算图标字符样式
+const iconCharStyle = computed(() => {
+  const iconDimension = Math.min(iconSize.value - 32, 128);
+  const fontSize = Math.floor(iconDimension * 0.75); // 字体大小约为图标尺寸的75%
+  return {
+    fontSize: `${fontSize}px`,
+  };
+});
+
+// 处理键盘事件
+function handleKeyDown(event: KeyboardEvent) {
+  // 检查是否按下了 Ctrl（Windows/Linux）或 Cmd（Mac）
+  const isModifierPressed = event.ctrlKey || event.metaKey;
+
+  if (!isModifierPressed) {
+    return;
+  }
+
+  // Ctrl + "+" 或 Ctrl + "=" 放大
+  if (event.key === '+' || event.key === '=') {
+    event.preventDefault();
+    event.stopPropagation();
+    zoomIn();
+    return;
+  }
+
+  // Ctrl + "-" 缩小
+  if (event.key === '-' || event.key === '_') {
+    event.preventDefault();
+    event.stopPropagation();
+    zoomOut();
+    return;
+  }
+}
+
+// 放大图标
+function zoomIn() {
+  if (iconSize.value < MAX_ICON_SIZE) {
+    iconSize.value = Math.min(iconSize.value + ICON_SIZE_STEP, MAX_ICON_SIZE);
+  }
+}
+
+// 缩小图标
+function zoomOut() {
+  if (iconSize.value > MIN_ICON_SIZE) {
+    iconSize.value = Math.max(iconSize.value - ICON_SIZE_STEP, MIN_ICON_SIZE);
+  }
+}
+
+// 组件挂载时聚焦容器以接收键盘事件
+onMounted(() => {
+  // 确保容器可以接收焦点
+  if (iconViewRef.value) {
+    iconViewRef.value.focus();
+  }
+});
 
 onUnmounted(() => {
   thumbnailUrls.value.clear();
@@ -487,13 +578,18 @@ defineExpose({
   position: relative;
   user-select: none;
   padding: 16px;
+  outline: none;
+}
+
+.icon-view:focus {
+  outline: none;
 }
 
 .icon-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 16px;
   align-items: start;
+  transition: grid-template-columns 0.2s ease;
 }
 
 .icon-item {
@@ -522,22 +618,19 @@ defineExpose({
 }
 
 .icon-item-icon {
-  width: 64px;
-  height: 64px;
-  font-size: 48px;
   margin-bottom: 8px;
   user-select: none;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: width 0.2s ease, height 0.2s ease;
 }
 
 .icon-item-thumbnail {
-  width: 64px;
-  height: 64px;
   object-fit: cover;
   border-radius: 6px;
   user-select: none;
+  transition: width 0.2s ease, height 0.2s ease;
 }
 
 .icon-item-name {
@@ -549,6 +642,7 @@ defineExpose({
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   line-height: 1.4;
   color: #212121;
