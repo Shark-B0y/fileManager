@@ -1,4 +1,5 @@
 /file-manager/src-tauri/target
+/file-manager/src-tauri/gen
 /file-manager/target
 /file-manager/node_modules
 /file-manager/package-lock.json

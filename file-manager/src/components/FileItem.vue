@@ -9,7 +9,16 @@
     @dblclick="handleDoubleClick"
   >
     <div class="item-cell name-cell" :style="nameCellStyle">
-      <span class="item-icon">{{ iconChar }}</span>
+      <span class="item-icon">
+        <img
+          v-if="thumbnailUrl"
+          :src="thumbnailUrl"
+          class="item-thumbnail"
+          :alt="item.name"
+          draggable="false"
+        />
+        <span v-else>{{ iconChar }}</span>
+      </span>
       <span v-if="!isEditing" class="item-name">{{ item.name }}</span>
       <input
         v-else
@@ -38,6 +47,7 @@ import { computed, ref, watch, nextTick, onUnmounted } from 'vue';
 import type { FileItem } from '../types/file';
 import { formatFileSize, formatDate, getFileTypeName } from '../utils/formatters';
 import { getIconChar, getFileIcon } from '../utils/icons';
+import { getThumbnailUrl, isImageFile } from '../utils/thumbnails';
 
 const props = defineProps<{
   item: FileItem;
@@ -64,6 +74,29 @@ const nameInputRef = ref<HTMLInputElement | null>(null);
 const iconChar = computed(() => {
   return getIconChar(getFileIcon(props.item));
 });
+
+const thumbnailUrl = ref<string | null>(null);
+
+async function loadThumbnail() {
+  if (!isImageFile(props.item)) {
+    thumbnailUrl.value = null;
+    return;
+  }
+
+  try {
+    thumbnailUrl.value = await getThumbnailUrl(props.item.path, props.item.extension);
+  } catch {
+    thumbnailUrl.value = null;
+  }
+}
+
+watch(
+  () => props.item,
+  () => {
+    void loadThumbnail();
+  },
+  { immediate: true }
+);
 
 const formattedSize = computed(() => {
   if (props.item.file_type === 'folder') {
@@ -128,7 +161,7 @@ function getFileExtension(fileName: string): string {
 // 处理重命名完成
 function handleRenameComplete() {
   const trimmedName = editingName.value.trim();
-  
+
   // 如果名称为空，取消重命名
   if (!trimmedName) {
     handleRenameCancel();
@@ -249,6 +282,19 @@ onUnmounted(() => {
 .item-icon {
   font-size: 18px;
   flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.item-thumbnail {
+  width: 22px;
+  height: 22px;
+  object-fit: cover;
+  border-radius: 4px;
+  user-select: none;
 }
 
 .item-name {

@@ -20,7 +20,16 @@
         @click="(e) => handleItemClick(item, e)"
         @dblclick="() => handleItemDoubleClick(item)"
       >
-        <div class="icon-item-icon">{{ iconChar(item) }}</div>
+        <div class="icon-item-icon">
+          <img
+            v-if="getThumbnailForItem(item)"
+            :src="getThumbnailForItem(item)"
+            class="icon-item-thumbnail"
+            :alt="item.name"
+            draggable="false"
+          />
+          <span v-else>{{ iconChar(item) }}</span>
+        </div>
         <div v-if="!isEditingItem(item.id)" class="icon-item-name">{{ item.name }}</div>
         <input
           v-else
@@ -48,6 +57,7 @@
 import { computed, ref, nextTick, onUnmounted, watch } from 'vue';
 import type { FileItem } from '../types/file';
 import { getIconChar, getFileIcon } from '../utils/icons';
+import { getThumbnailUrl, isImageFile } from '../utils/thumbnails';
 
 const props = defineProps<{
   items: FileItem[];
@@ -67,6 +77,9 @@ const iconViewRef = ref<HTMLDivElement | null>(null);
 
 // 文件项引用映射
 const itemRefs = ref<Map<string, HTMLElement>>(new Map());
+
+// 缩略图 URL（item.id -> blob url）
+const thumbnailUrls = ref<Map<string, string>>(new Map());
 
 // 输入框引用映射
 const inputRefs = ref<Map<string, HTMLInputElement>>(new Map());
@@ -141,7 +154,7 @@ function handleNameInput(event: Event, item: FileItem) {
 // 处理重命名完成
 function handleRenameComplete(item: FileItem) {
   const trimmedName = editingName.value.trim();
-  
+
   if (!trimmedName) {
     handleRenameCancel(item);
     return;
@@ -204,6 +217,59 @@ function setItemRef(el: any, id: string) {
 function iconChar(item: FileItem): string {
   return getIconChar(getFileIcon(item));
 }
+
+async function ensureThumbnailLoaded(item: FileItem) {
+  if (!isImageFile(item)) {
+    thumbnailUrls.value.delete(item.id);
+    return;
+  }
+
+  if (thumbnailUrls.value.has(item.id)) {
+    return;
+  }
+
+  try {
+    console.log('[IconView] 加载缩略图:', item.path, item.extension);
+    const url = await getThumbnailUrl(item.path, item.extension);
+    // console.log('[IconView] 缩略图加载成功:', item.id, url);
+    thumbnailUrls.value.set(item.id, url);
+  } catch (error) {
+    // 读取失败则回退到默认图标
+    console.error('[IconView] 缩略图加载失败:', item.path, error);
+    thumbnailUrls.value.delete(item.id);
+  }
+}
+
+watch(
+  () => props.items,
+  (items) => {
+    // 删除已不存在的 item 缓存（避免 Map 无限增长）
+    const ids = new Set(items.map(i => i.id));
+    Array.from(thumbnailUrls.value.keys()).forEach((id) => {
+      if (!ids.has(id)) {
+        thumbnailUrls.value.delete(id);
+      }
+    });
+
+    // 预加载图片缩略图（异步，不阻塞渲染）
+    items.forEach((item) => {
+      void ensureThumbnailLoaded(item);
+    });
+  },
+  { immediate: true }
+);
+
+function getThumbnailForItem(item: FileItem): string | undefined {
+  const val = thumbnailUrls.value.get(item.id);
+  if (!val && isImageFile(item)) {
+    console.log('[IconView] 缩略图未加载:', item.id, item.path);
+  }
+  return val;
+}
+
+onUnmounted(() => {
+  thumbnailUrls.value.clear();
+});
 
 // 处理文件项单击
 function handleItemClick(item: FileItem, event: MouseEvent) {
@@ -456,8 +522,21 @@ defineExpose({
 }
 
 .icon-item-icon {
+  width: 64px;
+  height: 64px;
   font-size: 48px;
   margin-bottom: 8px;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-item-thumbnail {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
   user-select: none;
 }
 
