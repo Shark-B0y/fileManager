@@ -1520,6 +1520,153 @@ pub async fn add_tags_to_files(
 
 ---
 
+### 14. search_files_by_tag - 根据标签ID搜索文件
+
+**功能描述**：搜索包含指定标签的所有文件，支持分页。排序规则：优先展示文件夹，同为文件或文件夹时，按创建时间倒序。用于在标签搜索模式下，根据选中的标签搜索相关文件。
+
+**接口名称**：`search_files_by_tag`
+
+**调用方式**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+import type { SearchResult } from '../types/file';
+
+const result = await invoke<SearchResult>('search_files_by_tag', {
+  tag_id: 1,
+  page: 1,
+  page_size: 50,
+});
+```
+
+#### 请求参数
+
+**Rust 后端**：
+```rust
+#[tauri::command]
+pub async fn search_files_by_tag(
+    db: State<'_, GlobalDatabase>,
+    tag_id: i32,
+    page: Option<usize>,
+    page_size: Option<usize>,
+) -> Result<SearchResult, String>
+```
+
+**参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| `tag_id` | `i32` | 是 | 标签ID |
+| `page` | `Option<usize>` | 否 | 页码（从1开始），默认为1 |
+| `page_size` | `Option<usize>` | 否 | 每页数量，默认为50 |
+
+**TypeScript 前端**：
+```typescript
+interface SearchFilesByTagRequest {
+  tag_id: number;
+  page?: number;
+  page_size?: number;
+}
+```
+
+#### 返回数据
+
+**成功返回**：`SearchResult` 对象
+
+**错误返回**：`String` 错误信息
+
+**常见错误**：
+- `"获取数据库连接失败: {error}"` - 无法获取数据库连接
+- `"查询文件总数失败: {error}"` - 查询文件总数时发生错误
+- `"查询文件列表失败: {error}"` - 查询文件列表时发生错误
+- `"获取文件元数据失败 {path}: {error}"` - 获取文件元数据时发生错误
+
+#### 数据结构
+
+**Rust 后端** (`src-tauri/src/models/file_system.rs`)：
+```rust
+pub struct SearchResult {
+    pub items: Vec<FileItem>,
+    pub total: usize,
+    pub page: usize,
+    pub page_size: usize,
+    pub has_more: bool,
+}
+```
+
+**TypeScript 前端** (`src/types/file.ts`)：
+```typescript
+export interface SearchResult {
+  /** 文件列表 */
+  items: FileItem[];
+  /** 总文件数 */
+  total: number;
+  /** 当前页码（从1开始） */
+  page: number;
+  /** 每页数量 */
+  page_size: number;
+  /** 是否有更多数据 */
+  has_more: boolean;
+}
+```
+
+#### 使用示例
+
+**前端调用**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+import type { SearchResult } from '../types/file';
+
+async function searchFilesByTag(tagId: number, page: number = 1, pageSize: number = 50): Promise<SearchResult> {
+  try {
+    const result = await invoke<SearchResult>('search_files_by_tag', {
+      tag_id: tagId,
+      page,
+      page_size: pageSize,
+    });
+    return result;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('搜索文件失败:', errorMessage);
+    throw error;
+  }
+}
+
+// 使用示例：搜索标签ID为1的文件，第一页
+const result = await searchFilesByTag(1, 1, 50);
+console.log(`找到 ${result.total} 个文件`);
+console.log(`当前页: ${result.page}, 每页: ${result.page_size}`);
+console.log(`是否有更多: ${result.has_more}`);
+result.items.forEach(item => {
+  console.log(`- ${item.name} (${item.file_type})`);
+});
+```
+
+**后端实现** (`src-tauri/src/commands.rs`)：
+```rust
+#[tauri::command]
+pub async fn search_files_by_tag(
+    db: State<'_, GlobalDatabase>,
+    tag_id: i32,
+    page: Option<usize>,
+    page_size: Option<usize>,
+) -> Result<SearchResult, String> {
+    TagService::search_files_by_tag(&*db, tag_id, page, page_size).await
+}
+```
+
+#### 注意事项
+
+1. **排序规则**：
+   - 优先展示文件夹（`file_type = 'folder'`）
+   - 同为文件或文件夹时，按创建时间倒序（`created_at DESC`）
+2. **分页支持**：支持分页查询，默认每页50条记录
+3. **文件存在性检查**：只返回实际存在的文件，如果数据库中的路径对应的文件不存在，会跳过该记录
+4. **元数据获取**：会从文件系统获取最新的文件元数据（大小、修改时间等）
+5. **软删除**：只返回未删除的文件（`deleted_at IS NULL`）
+6. **性能优化**：使用数据库索引优化查询性能
+
+---
+
 ## 示例命令
 
 ### 11. greet - 问候命令

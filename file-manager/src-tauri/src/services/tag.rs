@@ -1103,4 +1103,291 @@ impl TagService {
             }
         }
     }
+
+    /// 根据标签ID搜索文件
+    ///
+    /// # 参数
+    /// - `db`: 全局数据库实例
+    /// - `tag_id`: 标签ID
+    /// - `page`: 页码（从1开始），默认为1
+    /// - `page_size`: 每页数量，默认为50
+    ///
+    /// # 返回
+    /// - `Ok(SearchResult)`: 搜索结果
+    /// - `Err(String)`: 错误信息
+    pub async fn search_files_by_tag(
+        db: &GlobalDatabase,
+        tag_id: i32,
+        page: Option<usize>,
+        page_size: Option<usize>,
+    ) -> Result<crate::models::file_system::SearchResult, String> {
+        let connection = db
+            .get_connection()
+            .await
+            .map_err(|e| format!("获取数据库连接失败: {}", e))?;
+
+        let page = page.unwrap_or(1);
+        let page_size = page_size.unwrap_or(50);
+        let offset = (page - 1) * page_size;
+
+        match connection {
+            DatabaseConnectionRef::Postgres(pool) => {
+                Self::search_files_by_tag_postgres(&pool, tag_id, page, page_size, offset).await
+            }
+            DatabaseConnectionRef::Sqlite(pool) => {
+                Self::search_files_by_tag_sqlite(&pool, tag_id, page, page_size, offset).await
+            }
+        }
+    }
+
+    /// PostgreSQL 实现：根据标签ID搜索文件
+    async fn search_files_by_tag_postgres(
+        pool: &Pool<Postgres>,
+        tag_id: i32,
+        page: usize,
+        page_size: usize,
+        offset: usize,
+    ) -> Result<crate::models::file_system::SearchResult, String> {
+        use crate::models::file_system::{FileItem, SearchResult};
+        use std::path::Path;
+        use std::fs;
+
+        // 先查询总数
+        let total_row = sqlx::query(
+            r#"
+            SELECT COUNT(DISTINCT f.id) as total
+            FROM files f
+            INNER JOIN file_tags ft ON f.id = ft.file_id
+            WHERE ft.tag_id = $1 AND f.deleted_at IS NULL
+            "#,
+        )
+        .bind(tag_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("查询文件总数失败: {}", e))?;
+
+        let total: i64 = total_row.get("total");
+        let total = total as usize;
+
+        // 查询文件列表（优先文件夹，同类型按创建时间倒序）
+        let query = r#"
+            SELECT DISTINCT
+                f.id,
+                f.current_path,
+                f.file_type,
+                f.file_size,
+                f.created_at
+            FROM files f
+            INNER JOIN file_tags ft ON f.id = ft.file_id
+            WHERE ft.tag_id = $1 AND f.deleted_at IS NULL
+            ORDER BY
+                CASE WHEN f.file_type = 'folder' THEN 0 ELSE 1 END,
+                f.created_at DESC
+            LIMIT $2 OFFSET $3
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(tag_id)
+            .bind(page_size as i64)
+            .bind(offset as i64)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("查询文件列表失败: {}", e))?;
+
+        let mut items = Vec::new();
+        for row in rows {
+            let current_path: String = row.get("current_path");
+            let _file_type: String = row.get("file_type");
+            let file_size: i64 = row.get("file_size");
+
+            let path_obj = Path::new(&current_path);
+
+            // 检查文件是否存在
+            if !path_obj.exists() {
+                continue;
+            }
+
+            // 获取文件名
+            let name = path_obj
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_string();
+
+            // 获取文件扩展名
+            let extension = path_obj
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|s| s.to_string());
+
+            // 获取文件元数据
+            let metadata = fs::metadata(path_obj)
+                .map_err(|e| format!("获取文件元数据失败 {}: {}", current_path, e))?;
+
+            let modified = metadata
+                .modified()
+                .map_err(|e| format!("获取修改时间失败: {}", e))?;
+            let created = metadata.created().unwrap_or(modified);
+
+            // 转换为 ISO 8601 格式
+            let modified_date = Self::format_iso8601(&modified);
+            let created_date = Self::format_iso8601(&created);
+
+            let is_hidden = name.starts_with('.');
+
+            let item = FileItem {
+                id: current_path.clone(),
+                name,
+                path: current_path,
+                file_type: if metadata.is_dir() { "folder".to_string() } else { "file".to_string() },
+                size: file_size as u64,
+                modified_date,
+                created_date,
+                extension,
+                is_hidden,
+            };
+
+            items.push(item);
+        }
+
+        let has_more = offset + items.len() < total;
+
+        Ok(SearchResult {
+            items,
+            total,
+            page,
+            page_size,
+            has_more,
+        })
+    }
+
+    /// SQLite 实现：根据标签ID搜索文件
+    async fn search_files_by_tag_sqlite(
+        pool: &Pool<Sqlite>,
+        tag_id: i32,
+        page: usize,
+        page_size: usize,
+        offset: usize,
+    ) -> Result<crate::models::file_system::SearchResult, String> {
+        use crate::models::file_system::{FileItem, SearchResult};
+        use std::path::Path;
+        use std::fs;
+
+        // 先查询总数
+        let total_row = sqlx::query(
+            r#"
+            SELECT COUNT(DISTINCT f.id) as total
+            FROM files f
+            INNER JOIN file_tags ft ON f.id = ft.file_id
+            WHERE ft.tag_id = ?1 AND f.deleted_at IS NULL
+            "#,
+        )
+        .bind(tag_id)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("查询文件总数失败: {}", e))?;
+
+        let total: i64 = total_row.get("total");
+        let total = total as usize;
+
+        // 查询文件列表（优先文件夹，同类型按创建时间倒序）
+        let query = r#"
+            SELECT DISTINCT
+                f.id,
+                f.current_path,
+                f.file_type,
+                f.file_size,
+                f.created_at
+            FROM files f
+            INNER JOIN file_tags ft ON f.id = ft.file_id
+            WHERE ft.tag_id = ?1 AND f.deleted_at IS NULL
+            ORDER BY
+                CASE WHEN f.file_type = 'folder' THEN 0 ELSE 1 END,
+                f.created_at DESC
+            LIMIT ?2 OFFSET ?3
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(tag_id)
+            .bind(page_size as i64)
+            .bind(offset as i64)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("查询文件列表失败: {}", e))?;
+
+        let mut items = Vec::new();
+        for row in rows {
+            let current_path: String = row.get("current_path");
+            let _file_type: String = row.get("file_type");
+            let file_size: i64 = row.get("file_size");
+
+            let path_obj = Path::new(&current_path);
+
+            // 检查文件是否存在
+            if !path_obj.exists() {
+                continue;
+            }
+
+            // 获取文件名
+            let name = path_obj
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_string();
+
+            // 获取文件扩展名
+            let extension = path_obj
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|s| s.to_string());
+
+            // 获取文件元数据
+            let metadata = fs::metadata(path_obj)
+                .map_err(|e| format!("获取文件元数据失败 {}: {}", current_path, e))?;
+
+            let modified = metadata
+                .modified()
+                .map_err(|e| format!("获取修改时间失败: {}", e))?;
+            let created = metadata.created().unwrap_or(modified);
+
+            // 转换为 ISO 8601 格式
+            let modified_date = Self::format_iso8601(&modified);
+            let created_date = Self::format_iso8601(&created);
+
+            let is_hidden = name.starts_with('.');
+
+            let item = FileItem {
+                id: current_path.clone(),
+                name,
+                path: current_path,
+                file_type: if metadata.is_dir() { "folder".to_string() } else { "file".to_string() },
+                size: file_size as u64,
+                modified_date,
+                created_date,
+                extension,
+                is_hidden,
+            };
+
+            items.push(item);
+        }
+
+        let has_more = offset + items.len() < total;
+
+        Ok(SearchResult {
+            items,
+            total,
+            page,
+            page_size,
+            has_more,
+        })
+    }
+
+    /// 格式化时间为 ISO 8601 格式
+    fn format_iso8601(time: &std::time::SystemTime) -> String {
+        use std::time::{UNIX_EPOCH, Duration};
+        let duration = time.duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO);
+        let secs = duration.as_secs();
+        let nanos = duration.subsec_nanos();
+        format!("{}.{:09}Z", secs, nanos)
+    }
 }

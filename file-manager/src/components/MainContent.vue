@@ -1,6 +1,6 @@
 <template>
   <div class="main-content">
-    <div v-if="loading" class="loading">
+    <div v-if="loading || tagSearchLoading" class="loading">
       加载中...
     </div>
 
@@ -10,27 +10,29 @@
     </div>
 
     <FileList
-      v-else-if="directoryInfo && viewMode === 'list'"
+      v-else-if="(directoryInfo || tagSearchItems.length > 0) && viewMode === 'list'"
       ref="fileListRef"
-      :items="directoryInfo.items"
+      :items="displayItems"
       :selected-item-ids="selectedItemIds"
       :editing-item-id="editingItemId"
       @item-click="handleItemClick"
       @item-double-click="handleItemDoubleClick"
       @selection-change="handleSelectionChange"
       @rename-complete="handleRenameComplete"
+      @scroll-to-bottom="handleScrollToBottom"
     />
 
     <IconView
-      v-else-if="directoryInfo && viewMode === 'icon'"
+      v-else-if="(directoryInfo || tagSearchItems.length > 0) && viewMode === 'icon'"
       ref="iconViewRef"
-      :items="directoryInfo.items"
+      :items="displayItems"
       :selected-item-ids="selectedItemIds"
       :editing-item-id="editingItemId"
       @item-click="handleItemClick"
       @item-double-click="handleItemDoubleClick"
       @selection-change="handleSelectionChange"
       @rename-complete="handleRenameComplete"
+      @scroll-to-bottom="handleScrollToBottom"
     />
 
     <div v-else class="empty">
@@ -41,10 +43,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import { useFileSystem } from '../composables/useFileSystem';
 import FileList from './FileList.vue';
 import IconView from './IconView.vue';
-import type { FileItem } from '../types/file';
+import type { FileItem, SearchResult } from '../types/file';
 
 // 视图模式：'list' 或 'icon'
 const viewMode = ref<'list' | 'icon'>('list');
@@ -87,9 +90,32 @@ const editingItemId = ref<string | null>(null);
 const fileListRef = ref<InstanceType<typeof FileList> | null>(null);
 const iconViewRef = ref<InstanceType<typeof IconView> | null>(null);
 
-// 监听目录变化，清除选中状态
+// 标签搜索相关状态
+const tagSearchItems = ref<FileItem[]>([]);
+const tagSearchLoading = ref(false);
+const tagSearchPage = ref(1);
+const tagSearchHasMore = ref(false);
+const tagSearchTagId = ref<number | null>(null);
+const PAGE_SIZE = 50;
+
+// 计算显示的文件列表（优先显示标签搜索结果）
+const displayItems = computed(() => {
+  if (tagSearchItems.value.length > 0) {
+    return tagSearchItems.value;
+  }
+  return directoryInfo.value?.items || [];
+});
+
+// 监听目录变化，清除选中状态和标签搜索结果
 watch(directoryInfo, () => {
   selectedItemIds.value = new Set();
+  // 如果切换到目录浏览，清除标签搜索结果
+  if (directoryInfo.value && tagSearchItems.value.length > 0) {
+    tagSearchItems.value = [];
+    tagSearchPage.value = 1;
+    tagSearchHasMore.value = false;
+    tagSearchTagId.value = null;
+  }
 });
 
 // 处理文件项单击（选中）
@@ -216,19 +242,87 @@ function handleSearchEvent(event: CustomEvent) {
   }
 }
 
+// 处理标签搜索事件
+async function handleTagSearchEvent(event: CustomEvent) {
+  const { tagId, tagName } = event.detail;
+
+  tagSearchTagId.value = tagId;
+  tagSearchPage.value = 1;
+  tagSearchItems.value = [];
+  tagSearchLoading.value = true;
+  tagSearchHasMore.value = false;
+
+  try {
+    const result = await invoke<SearchResult>('search_files_by_tag', {
+      tagId: tagId,
+      page: 1,
+      pageSize: PAGE_SIZE,
+    });
+
+    tagSearchItems.value = result.items;
+    tagSearchHasMore.value = result.has_more;
+    tagSearchPage.value = result.page;
+
+    // 清除选中状态
+    selectedItemIds.value = new Set();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    window.dispatchEvent(
+      new CustomEvent('show-global-error', {
+        detail: { message: `搜索文件失败: ${message}` },
+      }),
+    );
+  } finally {
+    tagSearchLoading.value = false;
+  }
+}
+
+// 处理滚动到底部（瀑布流加载更多）
+async function handleScrollToBottom() {
+  // 只有在标签搜索模式下才加载更多
+  if (tagSearchTagId.value !== null && tagSearchHasMore.value && !tagSearchLoading.value) {
+    tagSearchLoading.value = true;
+    const nextPage = tagSearchPage.value + 1;
+
+      try {
+        const result = await invoke<SearchResult>('search_files_by_tag', {
+          tagId: tagSearchTagId.value,
+          page: nextPage,
+          pageSize: PAGE_SIZE,
+        });
+
+      // 追加新数据
+      tagSearchItems.value = [...tagSearchItems.value, ...result.items];
+      tagSearchHasMore.value = result.has_more;
+      tagSearchPage.value = result.page;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      window.dispatchEvent(
+        new CustomEvent('show-global-error', {
+          detail: { message: `加载更多文件失败: ${message}` },
+        }),
+      );
+    } finally {
+      tagSearchLoading.value = false;
+    }
+  }
+}
+
 // 监听搜索事件
 onMounted(() => {
-  window.addEventListener('file-search', handleSearchEvent as EventListener);
+  window.addEventListener('file-search', handleSearchEvent as unknown as EventListener);
+  window.addEventListener('tag-search', handleTagSearchEvent as unknown as EventListener);
 });
 
 onUnmounted(() => {
-  window.removeEventListener('file-search', handleSearchEvent as EventListener);
+  window.removeEventListener('file-search', handleSearchEvent as unknown as EventListener);
+  window.removeEventListener('tag-search', handleTagSearchEvent as unknown as EventListener);
 });
 
 // 计算选中的文件项
 const selectedItems = computed(() => {
-  if (!directoryInfo.value) return [];
-  return directoryInfo.value.items.filter(item => selectedItemIds.value.has(item.id));
+  const items = displayItems.value;
+  return items.filter(item => selectedItemIds.value.has(item.id));
 });
 
 // 暴露方法和数据给父组件

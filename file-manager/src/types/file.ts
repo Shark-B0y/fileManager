@@ -52,3 +52,18 @@ export interface FileSystemResult<T = void> {
   data?: T;
 }
 
+/**
+ * 搜索结果
+ */
+export interface SearchResult {
+  /** 文件列表 */
+  items: FileItem[];
+  /** 总文件数 */
+  total: number;
+  /** 当前页码（从1开始） */
+  page: number;
+  /** 每页数量 */
+  page_size: number;
+  /** 是否有更多数据 */
+  has_more: boolean;
+}

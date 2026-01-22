@@ -40,3 +40,17 @@ pub struct DirectoryInfo {
     pub total_folders: usize,
 }
 
+/// 搜索结果数据结构
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResult {
+    /// 文件列表
+    pub items: Vec<FileItem>,
+    /// 总文件数
+    pub total: usize,
+    /// 当前页码（从1开始）
+    pub page: usize,
+    /// 每页数量
+    pub page_size: usize,
+    /// 是否有更多数据
+    pub has_more: bool,
+}

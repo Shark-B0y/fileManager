@@ -6,6 +6,7 @@
     @mousemove="handleMouseMove"
     @mouseup="handleMouseUp"
     @mouseleave="handleMouseLeave"
+    @scroll="handleScroll"
     tabindex="0"
     @keydown="handleKeyDown"
   >
@@ -73,6 +74,7 @@ const emit = defineEmits<{
   'item-double-click': [item: FileItem];
   'selection-change': [selectedIds: Set<string>];
   'rename-complete': [itemId: string, newName: string];
+  'scroll-to-bottom': [];
 }>();
 
 // 容器引用
@@ -544,6 +546,17 @@ function handleMouseUp(event: MouseEvent) {
 // 处理鼠标离开
 function handleMouseLeave(event: MouseEvent) {
   // 保持选择框状态
+}
+
+// 处理滚动事件（检测是否滚动到底部）
+function handleScroll() {
+  if (!iconViewRef.value) return;
+
+  const { scrollTop, scrollHeight, clientHeight } = iconViewRef.value;
+  // 当滚动到距离底部100px以内时，触发加载更多
+  if (scrollHeight - scrollTop - clientHeight < 100) {
+    emit('scroll-to-bottom');
+  }
 }
 
 // 滚动到指定文件项

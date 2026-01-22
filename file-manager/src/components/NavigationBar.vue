@@ -70,6 +70,7 @@
           class="search-input"
           :placeholder="getSearchPlaceholder"
           @input="handleSearchInput"
+          @keydown.enter="handleSearchEnter"
           @keydown.esc="handleSearchEscape"
           @focus="handleSearchInputFocus"
         />
@@ -93,11 +94,11 @@
             文件搜索
           </div>
           <div
-            class="search-tab disabled"
-            @click.stop
+            class="search-tab"
+            :class="{ active: searchType === 'tag' }"
+            @click="selectSearchType('tag')"
           >
             标签搜索
-            <span class="coming-soon">（即将推出）</span>
           </div>
           <div
             class="search-tab disabled"
@@ -105,6 +106,28 @@
           >
             内容搜索
             <span class="coming-soon">（即将推出）</span>
+          </div>
+        </div>
+      </transition>
+
+      <!-- 标签匹配列表 -->
+      <transition name="dropdown-fade">
+        <div v-if="searchType === 'tag' && matchedTags.length > 0 && searchQuery" class="tag-suggestions">
+          <div
+            v-for="tag in matchedTags"
+            :key="tag.id"
+            class="tag-suggestion-item"
+            @click="selectTag(tag)"
+          >
+            <span
+              class="tag-badge"
+              :style="{
+                backgroundColor: tag.color || '#FFFF00',
+                color: tag.font_color || '#000000'
+              }"
+            >
+              {{ tag.name }}
+            </span>
           </div>
         </div>
       </transition>
@@ -125,6 +148,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useFileSystem } from '../composables/useFileSystem';
 import { useNavigation } from '../composables/useNavigation';
 import { useSearch } from '../composables/useSearch';
+import type { Tag } from '../types/tag';
 
 const {
   currentPath: fsCurrentPath,
@@ -165,6 +189,11 @@ const searchInputRef = ref<HTMLInputElement | null>(null);
 
 // 搜索下拉菜单状态
 const isSearchDropdownOpen = ref(false);
+
+// 标签搜索相关
+const matchedTags = ref<Tag[]>([]);
+const selectedTagId = ref<number | null>(null);
+let searchTagsTimer: number | null = null;
 
 // 错误提示消息
 const errorMessage = ref<string>('');
@@ -362,13 +391,41 @@ window.addEventListener('show-global-error', (event: Event) => {
 });
 
 // 处理搜索输入
-function handleSearchInput() {
-  if (directoryInfo.value?.items) {
-    performSearch(directoryInfo.value.items);
-    // 触发搜索事件，通知 MainContent 组件
-    window.dispatchEvent(new CustomEvent('file-search', {
-      detail: { query: searchQuery.value, result: searchResult.value }
-    }));
+async function handleSearchInput() {
+  if (searchType.value === 'file') {
+    // 文件搜索模式
+    if (directoryInfo.value?.items) {
+      performSearch(directoryInfo.value.items);
+      // 触发搜索事件，通知 MainContent 组件
+      window.dispatchEvent(new CustomEvent('file-search', {
+        detail: { query: searchQuery.value, result: searchResult.value }
+      }));
+    }
+  } else if (searchType.value === 'tag') {
+    // 标签搜索模式：输入时显示匹配的标签
+    const query = searchQuery.value.trim();
+    if (query) {
+      // 防抖处理：延迟300ms后搜索
+      if (searchTagsTimer !== null) {
+        clearTimeout(searchTagsTimer);
+      }
+      searchTagsTimer = window.setTimeout(async () => {
+        try {
+          const tags = await invoke<Tag[]>('search_tags', {
+            keyword: query,
+            limit: 10,
+          });
+          matchedTags.value = tags;
+        } catch (error) {
+          console.error('搜索标签失败:', error);
+          matchedTags.value = [];
+        }
+        searchTagsTimer = null;
+      }, 300);
+    } else {
+      matchedTags.value = [];
+      selectedTagId.value = null;
+    }
   }
 }
 
@@ -394,15 +451,49 @@ function toggleSearchDropdown() {
 
 // 选择搜索类型
 function selectSearchType(type: 'file' | 'tag' | 'content') {
-  if (type === 'file') {
+  if (type === 'file' || type === 'tag') {
     searchType.value = type;
     isSearchDropdownOpen.value = false;
+    matchedTags.value = [];
+    selectedTagId.value = null;
 
     // 当搜索类型改变时，重新执行搜索
-    if (searchQuery.value && directoryInfo.value?.items) {
+    if (type === 'file' && searchQuery.value && directoryInfo.value?.items) {
       performSearch(directoryInfo.value.items);
       window.dispatchEvent(new CustomEvent('file-search', {
         detail: { query: searchQuery.value, result: searchResult.value }
+      }));
+    } else if (type === 'tag' && searchQuery.value) {
+      handleSearchInput();
+    }
+  }
+}
+
+// 选择标签
+function selectTag(tag: Tag) {
+  selectedTagId.value = tag.id;
+  searchQuery.value = tag.name;
+  matchedTags.value = [];
+  searchInputRef.value?.blur();
+
+  // 触发标签搜索事件
+  window.dispatchEvent(new CustomEvent('tag-search', {
+    detail: { tagId: tag.id, tagName: tag.name }
+  }));
+}
+
+// 处理搜索输入框回车
+async function handleSearchEnter() {
+  if (searchType.value === 'tag') {
+    const query = searchQuery.value.trim();
+    if (query && matchedTags.value.length > 0) {
+      // 如果有匹配的标签，使用第一个
+      const firstTag = matchedTags.value[0];
+      selectTag(firstTag);
+    } else if (selectedTagId.value !== null) {
+      // 如果已经选择了标签，触发搜索
+      window.dispatchEvent(new CustomEvent('tag-search', {
+        detail: { tagId: selectedTagId.value, tagName: searchQuery.value }
       }));
     }
   }
@@ -810,6 +901,41 @@ onUnmounted(() => {
 .error-fade-enter-to,
 .error-fade-leave-from {
   opacity: 1;
+}
+
+/* 标签建议列表样式 */
+.tag-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  padding: 4px;
+}
+
+.tag-suggestion-item {
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background-color 0.15s;
+}
+
+.tag-suggestion-item:hover {
+  background-color: #f5f5f5;
+}
+
+.tag-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
 }
 </style>
 

@@ -42,6 +42,7 @@
       @mousemove="handleMouseMove"
       @mouseup="handleMouseUp"
       @mouseleave="handleMouseLeave"
+      @scroll="handleScroll"
     >
       <FileItem
         v-for="item in items"
@@ -82,6 +83,7 @@ const emit = defineEmits<{
   'item-double-click': [item: FileItemType];
   'selection-change': [selectedIds: Set<string>];
   'rename-complete': [itemId: string, newName: string];
+  'scroll-to-bottom': [];
 }>();
 
 // 列表容器引用
@@ -381,7 +383,7 @@ function handleHeaderMouseMove(event: MouseEvent) {
 
   const target = event.target as HTMLElement;
   const resizer = target.closest('.header-resizer') as HTMLElement;
-  
+
   if (resizer) {
     // 鼠标在 resizer 上
     const columnName = resizer.parentElement?.classList.contains('name-cell') ? 'name' :
@@ -527,6 +529,17 @@ onUnmounted(() => {
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
 });
+
+// 处理滚动事件（检测是否滚动到底部）
+function handleScroll() {
+  if (!listBodyRef.value) return;
+
+  const { scrollTop, scrollHeight, clientHeight } = listBodyRef.value;
+  // 当滚动到距离底部100px以内时，触发加载更多
+  if (scrollHeight - scrollTop - clientHeight < 100) {
+    emit('scroll-to-bottom');
+  }
+}
 
 // 滚动到指定文件项
 function scrollToItem(itemId: string) {

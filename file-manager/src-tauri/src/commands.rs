@@ -32,7 +32,7 @@
 
 use crate::config::GlobalConfigManager;
 use crate::database::GlobalDatabase;
-use crate::models::file_system::DirectoryInfo;
+use crate::models::file_system::{DirectoryInfo, SearchResult};
 use crate::services::{FileSystemService, TagService};
 use crate::models::tag::Tag;
 use tauri::State;
@@ -308,4 +308,32 @@ pub async fn add_tags_to_files(
     tag_id: i32,
 ) -> Result<(), String> {
     TagService::add_tags_to_files(&*db, paths, tag_id).await
+}
+
+/// 根据标签ID搜索文件
+///
+/// 搜索包含指定标签的所有文件，支持分页。排序规则：优先展示文件夹，同为文件或文件夹时，按创建时间倒序。
+///
+/// # 参数
+/// - `db`: 全局数据库实例
+/// - `tag_id`: 标签ID
+/// - `page`: 页码（从1开始），默认为1
+/// - `page_size`: 每页数量，默认为50
+///
+/// # 返回
+/// - `Ok(SearchResult)`: 搜索结果
+/// - `Err(String)`: 错误信息
+#[tauri::command]
+pub async fn search_files_by_tag(
+    db: State<'_, GlobalDatabase>,
+    tag_id: i32,
+    page: Option<usize>,
+    page_size: Option<usize>,
+) -> Result<SearchResult, String> {
+    let res = TagService::search_files_by_tag(&*db, tag_id, page, page_size).await;
+    if let Err(e) = res {
+        println!("search_files_by_tag error: {}", e);
+        return Err(e);
+    }
+    res
 }
