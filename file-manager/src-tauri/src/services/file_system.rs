@@ -8,6 +8,7 @@ use std::path::Path;
 use crate::models::file_system::{FileItem, DirectoryInfo};
 use crate::config::GlobalConfigManager;
 use crate::database::{DatabaseConnectionRef, GlobalDatabase};
+use crate::utils;
 use sqlx::{Pool, Postgres, Sqlite, Row};
 
 /// 文件系统服务
@@ -80,8 +81,8 @@ impl FileSystemService {
                 .unwrap_or(modified);
 
             // 转换为 ISO 8601 格式
-            let modified_date = Self::format_iso8601(&modified);
-            let created_date = Self::format_iso8601(&created);
+            let modified_date = utils::format_iso8601(&modified);
+            let created_date = utils::format_iso8601(&created);
 
             let is_hidden = file_name.starts_with('.');
 
@@ -263,8 +264,8 @@ impl FileSystemService {
                     let created = metadata.created()
                         .unwrap_or(modified);
 
-                    let modified_date = Self::format_iso8601(&modified);
-                    let created_date = Self::format_iso8601(&created);
+                    let modified_date = utils::format_iso8601(&modified);
+                    let created_date = utils::format_iso8601(&created);
 
                     let item = FileItem {
                         id: drive.clone(),
@@ -969,25 +970,5 @@ impl FileSystemService {
         Ok(())
     }
 
-    /// 格式化时间为 ISO 8601 格式
-    ///
-    /// # 参数
-    /// - `time`: 系统时间
-    ///
-    /// # 返回
-    /// 格式化的时间字符串（Unix 时间戳格式）
-    fn format_iso8601(time: &std::time::SystemTime) -> String {
-        use std::time::UNIX_EPOCH;
-
-        let duration = time.duration_since(UNIX_EPOCH)
-            .unwrap_or_default();
-
-        let secs = duration.as_secs();
-        let nanos = duration.subsec_nanos();
-
-        // 简化的 ISO 8601 格式
-        // 实际应该使用 chrono 库，但这里为了简单直接格式化
-        format!("{}.{:09}Z", secs, nanos)
-    }
 }
 

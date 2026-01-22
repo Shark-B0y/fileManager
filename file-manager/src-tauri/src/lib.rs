@@ -4,6 +4,7 @@ mod commands;
 mod models;
 mod services;
 mod system;
+mod utils;
 
 use tauri::Manager;
 
