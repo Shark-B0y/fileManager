@@ -32,7 +32,11 @@
   - [7. rename_file - 重命名文件](#7-rename_file---重命名文件)
   - [8. delete_files - 删除文件](#8-delete_files---删除文件)
 - [标签管理接口](#标签管理接口)
-  - [7. get_most_used_tags - 获取使用数量最多的标签](#7-get_most_used_tags---获取使用数量最多的标签)
+  - [9. get_tag_list - 获取标签列表](#9-get_tag_list---获取标签列表)
+  - [10. search_tags - 搜索标签](#10-search_tags---搜索标签)
+  - [11. create_tag - 创建新标签](#11-create_tag---创建新标签)
+  - [12. modify_tag - 修改标签](#12-modify_tag---修改标签)
+  - [13. add_tags_to_files - 批量添加标签到文件/文件夹](#13-add_tags_to_files---批量添加标签到文件文件夹)
 - [示例命令](#示例命令)
   - [8. greet - 问候命令](#8-greet---问候命令)
 - [数据结构定义](#数据结构定义)
@@ -685,7 +689,7 @@ pub async fn copy_files(paths: Vec<String>, target_path: String) -> Result<(), S
 
 ### 7. rename_file - 重命名文件
 
-**功能描述**：将指定的文件或文件夹重命名为新名称。
+**功能描述**：将指定的文件或文件夹重命名为新名称，并自动更新数据库中的路径记录，确保标签关联不会丢失。
 
 **接口名称**：`rename_file`
 
@@ -704,7 +708,11 @@ await invoke('rename_file', {
 **Rust 后端**：
 ```rust
 #[tauri::command]
-pub async fn rename_file(old_path: String, new_name: String) -> Result<(), String>
+pub async fn rename_file(
+    db: State<'_, GlobalDatabase>,
+    old_path: String,
+    new_name: String,
+) -> Result<(), String>
 ```
 
 **参数说明**：
@@ -765,8 +773,12 @@ await renameFile('C:\\Users\\Username\\folder', 'newfolder');
 **后端实现** (`src-tauri/src/commands.rs`)：
 ```rust
 #[tauri::command]
-pub async fn rename_file(old_path: String, new_name: String) -> Result<(), String> {
-    FileSystemService::rename_file(&old_path, &new_name)
+pub async fn rename_file(
+    db: State<'_, GlobalDatabase>,
+    old_path: String,
+    new_name: String,
+) -> Result<(), String> {
+    FileSystemService::rename_file(&*db, &old_path, &new_name).await
 }
 ```
 
@@ -820,12 +832,13 @@ pub fn rename_file(old_path: &str, new_name: &str) -> Result<(), String> {
 4. **目标冲突**：如果目标位置已存在同名文件/文件夹，操作会失败
 5. **权限要求**：需要对源路径所在目录有写入权限
 6. **使用场景**：主要用于工具栏重命名按钮，当选中单个文件或文件夹时，点击重命名按钮后，文件名显示区域会变为输入框，用户修改名称后按回车键完成重命名
+7. **数据库更新**：重命名后会自动更新数据库中的 `current_path` 字段，确保文件的所有标签关联不会丢失
 
 ---
 
 ### 8. delete_files - 删除文件
 
-**功能描述**：删除指定的文件/文件夹列表，支持递归删除文件夹。删除操作不可撤销，请谨慎使用。
+**功能描述**：删除指定的文件/文件夹列表，支持递归删除文件夹。删除操作不可撤销，请谨慎使用。删除后会更新数据库记录（软删除），确保标签关联信息保留。
 
 **接口名称**：`delete_files`
 
@@ -843,7 +856,10 @@ await invoke('delete_files', {
 **Rust 后端**：
 ```rust
 #[tauri::command]
-pub async fn delete_files(paths: Vec<String>) -> Result<(), String>
+pub async fn delete_files(
+    db: State<'_, GlobalDatabase>,
+    paths: Vec<String>,
+) -> Result<(), String>
 ```
 
 **参数说明**：
@@ -901,8 +917,11 @@ await deleteFiles([
 **后端实现** (`src-tauri/src/commands.rs`)：
 ```rust
 #[tauri::command]
-pub async fn delete_files(paths: Vec<String>) -> Result<(), String> {
-    FileSystemService::delete_files(&paths)
+pub async fn delete_files(
+    db: State<'_, GlobalDatabase>,
+    paths: Vec<String>,
+) -> Result<(), String> {
+    FileSystemService::delete_files(&*db, &paths).await
 }
 ```
 
@@ -941,6 +960,7 @@ pub fn delete_files(paths: &[String]) -> Result<(), String> {
 4. **权限要求**：需要对要删除的路径有写入权限
 5. **使用场景**：主要用于工具栏删除按钮，当选中文件或文件夹后，点击删除按钮会弹出确认对话框，确认后执行删除操作
 6. **确认机制**：前端应在调用此接口前显示确认对话框，防止误删
+7. **数据库更新**：删除后会更新数据库中的 `deleted_at` 字段（软删除），保留文件记录和标签关联信息，便于后续恢复或查询历史记录
 
 ---
 
@@ -1371,6 +1391,111 @@ pub async fn modify_tag(
 4. **自动更新时间**：修改标签时，`updated_at` 字段会自动更新为当前时间
 
 5. **颜色格式**：颜色值应使用 HEX 格式（如 `#FF0000`），但系统不会强制验证格式
+
+### 13. add_tags_to_files - 批量添加标签到文件/文件夹
+
+**功能描述**：为指定的文件/文件夹列表批量添加标签。如果文件记录在数据库中不存在，会自动创建文件记录。用于在文件管理器中选中文件/文件夹后，点击标签为其添加标签。
+
+**接口名称**：`add_tags_to_files`
+
+**调用方式**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+await invoke('add_tags_to_files', {
+  paths: ['C:\\Users\\Username\\file1.txt', 'C:\\Users\\Username\\folder1'],
+  tag_id: 1,
+});
+```
+
+#### 请求参数
+
+**Rust 后端**：
+```rust
+#[tauri::command]
+pub async fn add_tags_to_files(
+    db: State<'_, GlobalDatabase>,
+    paths: Vec<String>,
+    tag_id: i32,
+) -> Result<(), String>
+```
+
+**参数说明**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| `paths` | `Vec<String>` | 是 | 要添加标签的文件/文件夹路径列表 |
+| `tag_id` | `i32` | 是 | 标签ID |
+
+**TypeScript 前端**：
+```typescript
+interface AddTagsToFilesRequest {
+  paths: string[];
+  tag_id: number;
+}
+```
+
+#### 返回数据
+
+**成功返回**：无返回值（`void`）
+
+**错误返回**：`String` 错误信息
+
+**常见错误**：
+- `"标签 ID {tag_id} 不存在"` - 指定的标签ID不存在或已被删除
+- `"路径不存在: {path}"` - 指定的路径不存在
+- `"获取文件元数据失败 {path}: {error}"` - 获取文件元数据时发生错误
+- `"获取数据库连接失败: {error}"` - 无法获取数据库连接
+- `"创建文件记录失败: {error}"` - 创建文件记录时发生错误
+- `"添加标签关联失败: {error}"` - 添加文件-标签关联时发生错误
+
+#### 使用示例
+
+**前端调用**：
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+async function addTagToSelectedFiles(paths: string[], tagId: number): Promise<void> {
+  try {
+    await invoke('add_tags_to_files', {
+      paths,
+      tag_id: tagId,
+    });
+    console.log('添加标签成功');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('添加标签失败:', errorMessage);
+    throw error;
+  }
+}
+
+// 使用示例：为选中的文件和文件夹添加标签
+await addTagToSelectedFiles(
+  ['C:\\Users\\Username\\file1.txt', 'C:\\Users\\Username\\folder1'],
+  1
+);
+```
+
+**后端实现** (`src-tauri/src/commands.rs`)：
+```rust
+#[tauri::command]
+pub async fn add_tags_to_files(
+    db: State<'_, GlobalDatabase>,
+    paths: Vec<String>,
+    tag_id: i32,
+) -> Result<(), String> {
+    TagService::add_tags_to_files(&*db, paths, tag_id).await
+}
+```
+
+#### 注意事项
+
+1. **自动创建文件记录**：如果文件/文件夹在数据库中不存在，系统会自动创建文件记录
+2. **重复添加**：如果文件已经拥有该标签，不会重复添加（使用 `ON CONFLICT DO NOTHING` 或 `INSERT OR IGNORE`）
+3. **文件夹处理**：文件夹的 `file_type` 为 `"folder"`，`file_size` 为 `0`
+4. **标签使用次数**：添加标签后，会自动更新标签的 `usage_count` 字段
+5. **批量操作**：支持同时为多个文件/文件夹添加标签
+6. **路径验证**：系统会验证路径是否存在，如果路径不存在会返回错误
 
 ---
 

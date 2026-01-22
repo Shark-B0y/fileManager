@@ -162,11 +162,15 @@
               v-for="tag in mostUsedTags"
               :key="tag.id"
               class="tag-item"
-              :class="{ selected: selectedTag?.id === tag.id }"
+              :class="{
+                selected: selectedTag?.id === tag.id,
+                'can-add-tag': props.selectedItems.length > 0
+              }"
               :style="{
                 backgroundColor: tag.color || '#FFFF00',
                 color: tag.font_color || '#000000'
               }"
+              @click="handleTagClick(tag)"
               @dblclick="selectTagForModify(tag)"
             >
               {{ tag.name }}
@@ -534,6 +538,50 @@ async function loadTagList() {
     emit('error', `加载标签失败: ${message}`);
   } finally {
     loadingTags.value = false;
+  }
+}
+
+// 处理标签点击
+async function handleTagClick(tag: Tag) {
+  // 如果有选中的文件/文件夹，则为它们添加标签
+  if (props.selectedItems.length > 0) {
+    await addTagToSelectedFiles(tag);
+  } else {
+    // 如果没有选中文件，则仅选中标签（用于后续修改）
+    selectTag(tag);
+  }
+}
+
+// 为选中的文件/文件夹添加标签
+async function addTagToSelectedFiles(tag: Tag) {
+  if (props.selectedItems.length === 0) {
+    return;
+  }
+
+  try {
+    // 获取所有选中项的路径
+    const paths = props.selectedItems.map(item => item.path);
+
+    // 调用后端接口添加标签
+    await invoke('add_tags_to_files', {
+      paths: paths,
+      tagId: tag.id,
+    });
+
+    // 显示成功提示（使用 alert，后续可以改为更优雅的提示方式）
+    const itemCount = props.selectedItems.length;
+    const successMessage = itemCount === 1
+      ? `已为文件 "${props.selectedItems[0].name}" 添加标签 "${tag.name}"`
+      : `已为 ${itemCount} 个文件/文件夹添加标签 "${tag.name}"`;
+
+    // 使用 alert 显示成功消息（后续可以改为更优雅的提示方式）
+    alert(successMessage);
+
+    // 重新加载标签列表以更新使用次数
+    await loadTagList();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emit('error', `添加标签失败: ${message}`);
   }
 }
 
@@ -917,6 +965,33 @@ async function handleTagModified() {
 .tag-item.selected {
   border: 2px solid #2563eb;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.tag-item.can-add-tag {
+  cursor: pointer;
+  position: relative;
+}
+
+.tag-item.can-add-tag:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.tag-item.can-add-tag:hover::after {
+  content: '点击添加';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 4px;
+  padding: 2px 6px;
+  background-color: #333;
+  color: #fff;
+  font-size: 10px;
+  white-space: nowrap;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 1000;
 }
 
 .tag-empty,

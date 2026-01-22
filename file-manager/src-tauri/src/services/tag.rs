@@ -792,4 +792,315 @@ impl TagService {
             None => Err(format!("标签 ID {} 不存在", id)),
         }
     }
+
+    /// 批量添加标签到文件/文件夹
+    ///
+    /// # 参数
+    /// - `db`: 全局数据库实例
+    /// - `paths`: 文件/文件夹路径列表
+    /// - `tag_id`: 标签ID
+    ///
+    /// # 返回
+    /// - `Ok(())`: 操作成功
+    /// - `Err(String)`: 错误信息
+    pub async fn add_tags_to_files(
+        db: &GlobalDatabase,
+        paths: Vec<String>,
+        tag_id: i32,
+    ) -> Result<(), String> {
+        let connection = db
+            .get_connection()
+            .await
+            .map_err(|e| format!("获取数据库连接失败: {}", e))?;
+
+        // 验证标签是否存在
+        match connection {
+            DatabaseConnectionRef::Postgres(pool) => {
+                Self::verify_tag_exists_postgres(&pool, tag_id).await?;
+                Self::add_tags_to_files_postgres(&pool, &paths, tag_id).await
+            }
+            DatabaseConnectionRef::Sqlite(pool) => {
+                Self::verify_tag_exists_sqlite(&pool, tag_id).await?;
+                Self::add_tags_to_files_sqlite(&pool, &paths, tag_id).await
+            }
+        }
+    }
+
+    /// PostgreSQL 实现：验证标签是否存在
+    async fn verify_tag_exists_postgres(pool: &Pool<Postgres>, tag_id: i32) -> Result<(), String> {
+        let row = sqlx::query("SELECT 1 FROM tags WHERE id = $1 AND deleted_at IS NULL")
+            .bind(tag_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| format!("验证标签失败: {}", e))?;
+
+        if row.is_none() {
+            return Err(format!("标签 ID {} 不存在", tag_id));
+        }
+
+        Ok(())
+    }
+
+    /// SQLite 实现：验证标签是否存在
+    async fn verify_tag_exists_sqlite(pool: &Pool<Sqlite>, tag_id: i32) -> Result<(), String> {
+        let row = sqlx::query("SELECT 1 FROM tags WHERE id = ?1 AND deleted_at IS NULL")
+            .bind(tag_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| format!("验证标签失败: {}", e))?;
+
+        if row.is_none() {
+            return Err(format!("标签 ID {} 不存在", tag_id));
+        }
+
+        Ok(())
+    }
+
+    /// PostgreSQL 实现：批量添加标签到文件
+    async fn add_tags_to_files_postgres(
+        pool: &Pool<Postgres>,
+        paths: &[String],
+        tag_id: i32,
+    ) -> Result<(), String> {
+        use std::path::Path;
+        use std::fs;
+
+        for path in paths {
+            let path_obj = Path::new(path);
+
+            // 检查路径是否存在
+            if !path_obj.exists() {
+                return Err(format!("路径不存在: {}", path));
+            }
+
+            // 判断是文件还是文件夹
+            let is_dir = path_obj.is_dir();
+            let file_type = if is_dir { "folder" } else { "file" };
+
+            // 获取文件大小
+            let file_size = if is_dir {
+                0
+            } else {
+                fs::metadata(path_obj)
+                    .map_err(|e| format!("获取文件元数据失败 {}: {}", path, e))?
+                    .len() as i64
+            };
+
+            // 获取或创建文件记录
+            let file_id = Self::get_or_create_file_postgres(pool, path, file_type, file_size).await?;
+
+            // 添加文件-标签关联（如果已存在则忽略）
+            sqlx::query(
+                r#"
+                INSERT INTO file_tags (file_id, tag_id)
+                VALUES ($1, $2)
+                ON CONFLICT (file_id, tag_id) DO NOTHING
+                "#,
+            )
+            .bind(file_id)
+            .bind(tag_id)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("添加标签关联失败: {}", e))?;
+        }
+
+        // 更新标签使用次数
+        sqlx::query(
+            r#"
+            UPDATE tags
+            SET usage_count = (
+                SELECT COUNT(DISTINCT file_id)
+                FROM file_tags
+                WHERE tag_id = $1
+            )
+            WHERE id = $1
+            "#,
+        )
+        .bind(tag_id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("更新标签使用次数失败: {}", e))?;
+
+        Ok(())
+    }
+
+    /// SQLite 实现：批量添加标签到文件
+    async fn add_tags_to_files_sqlite(
+        pool: &Pool<Sqlite>,
+        paths: &[String],
+        tag_id: i32,
+    ) -> Result<(), String> {
+        use std::path::Path;
+        use std::fs;
+
+        for path in paths {
+            let path_obj = Path::new(path);
+
+            // 检查路径是否存在
+            if !path_obj.exists() {
+                return Err(format!("路径不存在: {}", path));
+            }
+
+            // 判断是文件还是文件夹
+            let is_dir = path_obj.is_dir();
+            let file_type = if is_dir { "folder" } else { "file" };
+
+            // 获取文件大小
+            let file_size = if is_dir {
+                0
+            } else {
+                fs::metadata(path_obj)
+                    .map_err(|e| format!("获取文件元数据失败 {}: {}", path, e))?
+                    .len() as i64
+            };
+
+            // 获取或创建文件记录
+            let file_id = Self::get_or_create_file_sqlite(pool, path, file_type, file_size).await?;
+
+            // 添加文件-标签关联（如果已存在则忽略）
+            sqlx::query(
+                r#"
+                INSERT OR IGNORE INTO file_tags (file_id, tag_id)
+                VALUES (?1, ?2)
+                "#,
+            )
+            .bind(file_id)
+            .bind(tag_id)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("添加标签关联失败: {}", e))?;
+        }
+
+        // 更新标签使用次数
+        sqlx::query(
+            r#"
+            UPDATE tags
+            SET usage_count = (
+                SELECT COUNT(DISTINCT file_id)
+                FROM file_tags
+                WHERE tag_id = ?1
+            )
+            WHERE id = ?1
+            "#,
+        )
+        .bind(tag_id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("更新标签使用次数失败: {}", e))?;
+
+        Ok(())
+    }
+
+    /// PostgreSQL 实现：获取或创建文件记录
+    async fn get_or_create_file_postgres(
+        pool: &Pool<Postgres>,
+        path: &str,
+        file_type: &str,
+        file_size: i64,
+    ) -> Result<i32, String> {
+        // 先尝试查找现有记录
+        let row = sqlx::query("SELECT id FROM files WHERE current_path = $1 AND deleted_at IS NULL")
+            .bind(path)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| format!("查询文件记录失败: {}", e))?;
+
+        if let Some(row) = row {
+            return Ok(row.get("id"));
+        }
+
+        // 如果不存在，创建新记录
+        let row = sqlx::query(
+            r#"
+            INSERT INTO files (current_path, file_type, file_size)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (current_path) DO UPDATE
+            SET file_type = EXCLUDED.file_type,
+                file_size = EXCLUDED.file_size,
+                updated_at = CURRENT_TIMESTAMP,
+                deleted_at = NULL
+            RETURNING id
+            "#,
+        )
+        .bind(path)
+        .bind(file_type)
+        .bind(file_size)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("创建文件记录失败: {}", e))?;
+
+        Ok(row.get("id"))
+    }
+
+    /// SQLite 实现：获取或创建文件记录
+    async fn get_or_create_file_sqlite(
+        pool: &Pool<Sqlite>,
+        path: &str,
+        file_type: &str,
+        file_size: i64,
+    ) -> Result<i32, String> {
+        // 先尝试查找现有记录
+        let row = sqlx::query("SELECT id FROM files WHERE current_path = ?1 AND deleted_at IS NULL")
+            .bind(path)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| format!("查询文件记录失败: {}", e))?;
+
+        if let Some(row) = row {
+            return Ok(row.get("id"));
+        }
+
+        // 如果不存在，创建新记录
+        // SQLite 不支持 ON CONFLICT DO UPDATE，需要先尝试插入，如果失败则更新
+        let result = sqlx::query(
+            r#"
+            INSERT INTO files (current_path, file_type, file_size)
+            VALUES (?1, ?2, ?3)
+            "#,
+        )
+        .bind(path)
+        .bind(file_type)
+        .bind(file_size)
+        .execute(pool)
+        .await;
+
+        match result {
+            Ok(_) => {
+                // 插入成功，获取新ID
+                let row = sqlx::query("SELECT id FROM files WHERE current_path = ?1")
+                    .bind(path)
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|e| format!("获取文件ID失败: {}", e))?;
+                Ok(row.get("id"))
+            }
+            Err(_) => {
+                // 插入失败（可能是唯一约束冲突），更新现有记录
+                sqlx::query(
+                    r#"
+                    UPDATE files
+                    SET file_type = ?2,
+                        file_size = ?3,
+                        updated_at = CURRENT_TIMESTAMP,
+                        deleted_at = NULL
+                    WHERE current_path = ?1
+                    "#,
+                )
+                .bind(path)
+                .bind(file_type)
+                .bind(file_size)
+                .execute(pool)
+                .await
+                .map_err(|e| format!("更新文件记录失败: {}", e))?;
+
+                // 获取更新后的ID
+                let row = sqlx::query("SELECT id FROM files WHERE current_path = ?1")
+                    .bind(path)
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|e| format!("获取文件ID失败: {}", e))?;
+                Ok(row.get("id"))
+            }
+        }
+    }
 }

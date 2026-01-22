@@ -7,6 +7,8 @@ use std::path::Path;
 
 use crate::models::file_system::{FileItem, DirectoryInfo};
 use crate::config::GlobalConfigManager;
+use crate::database::{DatabaseConnectionRef, GlobalDatabase};
+use sqlx::{Pool, Postgres, Sqlite};
 
 /// 文件系统服务
 pub struct FileSystemService;
@@ -481,13 +483,18 @@ impl FileSystemService {
     /// 重命名文件或文件夹
     ///
     /// # 参数
+    /// - `db`: 全局数据库实例
     /// - `old_path`: 原文件/文件夹路径
     /// - `new_name`: 新名称
     ///
     /// # 返回
     /// - `Ok(())`: 操作成功
     /// - `Err(String)`: 错误信息
-    pub fn rename_file(old_path: &str, new_name: &str) -> Result<(), String> {
+    pub async fn rename_file(
+        db: &GlobalDatabase,
+        old_path: &str,
+        new_name: &str,
+    ) -> Result<(), String> {
         let source_path = Path::new(old_path);
 
         // 检查源路径是否存在
@@ -511,6 +518,7 @@ impl FileSystemService {
 
         // 构建新路径
         let new_path = parent_dir.join(new_name);
+        let new_path_str = new_path.to_string_lossy().to_string();
 
         // 如果目标路径已存在，返回错误
         if new_path.exists() {
@@ -521,7 +529,19 @@ impl FileSystemService {
         fs::rename(source_path, &new_path)
             .map_err(|e| format!("重命名失败 {} -> {}: {}", old_path, new_path.display(), e))?;
 
-        Ok(())
+        // 更新数据库中的路径
+        let connection = db
+            .get_connection()
+            .await
+            .map_err(|e| format!("获取数据库连接失败: {}", e))?;
+        match connection {
+            DatabaseConnectionRef::Postgres(pool) => {
+                Self::update_file_path_postgres(&pool, old_path, &new_path_str).await
+            }
+            DatabaseConnectionRef::Sqlite(pool) => {
+                Self::update_file_path_sqlite(&pool, old_path, &new_path_str).await
+            }
+        }
     }
 
     /// 删除文件或文件夹
@@ -529,12 +549,14 @@ impl FileSystemService {
     /// 删除指定的文件/文件夹列表，支持递归删除文件夹
     ///
     /// # 参数
+    /// - `db`: 全局数据库实例
     /// - `paths`: 要删除的文件/文件夹路径列表
     ///
     /// # 返回
     /// - `Ok(())`: 操作成功
     /// - `Err(String)`: 错误信息
-    pub fn delete_files(paths: &[String]) -> Result<(), String> {
+    pub async fn delete_files(db: &GlobalDatabase, paths: &[String]) -> Result<(), String> {
+        // 先删除文件系统中的文件
         for path in paths {
             let target_path = Path::new(path);
 
@@ -553,6 +575,108 @@ impl FileSystemService {
                 fs::remove_file(target_path)
                     .map_err(|e| format!("删除文件失败 {}: {}", path, e))?;
             }
+        }
+
+        // 更新数据库：软删除文件记录（设置 deleted_at）
+        let connection = db
+            .get_connection()
+            .await
+            .map_err(|e| format!("获取数据库连接失败: {}", e))?;
+
+        match connection {
+            DatabaseConnectionRef::Postgres(pool) => {
+                Self::soft_delete_files_postgres(&pool, paths).await
+            }
+            DatabaseConnectionRef::Sqlite(pool) => {
+                Self::soft_delete_files_sqlite(&pool, paths).await
+            }
+        }
+    }
+
+    /// PostgreSQL 实现：更新文件路径
+    async fn update_file_path_postgres(
+        pool: &Pool<Postgres>,
+        old_path: &str,
+        new_path: &str,
+    ) -> Result<(), String> {
+        println!("update_file_path_postgres: old_path = {}, new_path = {}", old_path, new_path);
+        sqlx::query(
+            r#"
+            UPDATE files
+            SET current_path = $1, updated_at = CURRENT_TIMESTAMP
+            WHERE current_path = $2 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(new_path)
+        .bind(old_path)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("更新文件路径失败: {}", e))?;
+
+        Ok(())
+    }
+
+    /// SQLite 实现：更新文件路径
+    async fn update_file_path_sqlite(
+        pool: &Pool<Sqlite>,
+        old_path: &str,
+        new_path: &str,
+    ) -> Result<(), String> {
+        sqlx::query(
+            r#"
+            UPDATE files
+            SET current_path = ?1, updated_at = CURRENT_TIMESTAMP
+            WHERE current_path = ?2 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(new_path)
+        .bind(old_path)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("更新文件路径失败: {}", e))?;
+
+        Ok(())
+    }
+
+    /// PostgreSQL 实现：软删除文件记录
+    async fn soft_delete_files_postgres(
+        pool: &Pool<Postgres>,
+        paths: &[String],
+    ) -> Result<(), String> {
+        for path in paths {
+            sqlx::query(
+                r#"
+                UPDATE files
+                SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                WHERE current_path = $1 AND deleted_at IS NULL
+                "#,
+            )
+            .bind(path)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("软删除文件记录失败: {}", e))?;
+        }
+
+        Ok(())
+    }
+
+    /// SQLite 实现：软删除文件记录
+    async fn soft_delete_files_sqlite(
+        pool: &Pool<Sqlite>,
+        paths: &[String],
+    ) -> Result<(), String> {
+        for path in paths {
+            sqlx::query(
+                r#"
+                UPDATE files
+                SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                WHERE current_path = ?1 AND deleted_at IS NULL
+                "#,
+            )
+            .bind(path)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("软删除文件记录失败: {}", e))?;
         }
 
         Ok(())

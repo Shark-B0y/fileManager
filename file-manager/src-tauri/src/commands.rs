@@ -239,9 +239,10 @@ pub async fn modify_tag(
 
 /// 重命名文件或文件夹
 ///
-/// 将指定路径的文件或文件夹重命名为新名称
+/// 将指定路径的文件或文件夹重命名为新名称，并更新数据库中的路径记录
 ///
 /// # 参数
+/// - `db`: 全局数据库实例
 /// - `old_path`: 原文件/文件夹路径
 /// - `new_name`: 新名称
 ///
@@ -249,8 +250,12 @@ pub async fn modify_tag(
 /// - `Ok(())`: 操作成功
 /// - `Err(String)`: 错误信息
 #[tauri::command]
-pub async fn rename_file(old_path: String, new_name: String) -> Result<(), String> {
-    FileSystemService::rename_file(&old_path, &new_name)
+pub async fn rename_file(
+    db: State<'_, GlobalDatabase>,
+    old_path: String,
+    new_name: String,
+) -> Result<(), String> {
+    FileSystemService::rename_file(&*db, &old_path, &new_name).await
 }
 
 /// 删除文件或文件夹
@@ -264,6 +269,30 @@ pub async fn rename_file(old_path: String, new_name: String) -> Result<(), Strin
 /// - `Ok(())`: 操作成功
 /// - `Err(String)`: 错误信息
 #[tauri::command]
-pub async fn delete_files(paths: Vec<String>) -> Result<(), String> {
-    FileSystemService::delete_files(&paths)
+pub async fn delete_files(
+    db: State<'_, GlobalDatabase>,
+    paths: Vec<String>,
+) -> Result<(), String> {
+    FileSystemService::delete_files(&*db, &paths).await
+}
+
+/// 批量添加标签到文件/文件夹
+///
+/// 为指定的文件/文件夹列表添加标签。如果文件记录不存在，会自动创建。
+///
+/// # 参数
+/// - `db`: 全局数据库实例
+/// - `paths`: 要添加标签的文件/文件夹路径列表
+/// - `tag_id`: 标签ID
+///
+/// # 返回
+/// - `Ok(())`: 操作成功
+/// - `Err(String)`: 错误信息
+#[tauri::command]
+pub async fn add_tags_to_files(
+    db: State<'_, GlobalDatabase>,
+    paths: Vec<String>,
+    tag_id: i32,
+) -> Result<(), String> {
+    TagService::add_tags_to_files(&*db, paths, tag_id).await
 }
