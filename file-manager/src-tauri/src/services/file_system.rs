@@ -8,7 +8,7 @@ use std::path::Path;
 use crate::models::file_system::{FileItem, DirectoryInfo};
 use crate::config::GlobalConfigManager;
 use crate::database::{DatabaseConnectionRef, GlobalDatabase};
-use sqlx::{Pool, Postgres, Sqlite};
+use sqlx::{Pool, Postgres, Sqlite, Row};
 
 /// 文件系统服务
 pub struct FileSystemService;
@@ -331,13 +331,18 @@ impl FileSystemService {
     /// 剪切文件（移动文件）
     ///
     /// # 参数
+    /// - `db`: 全局数据库实例
     /// - `paths`: 要剪切的文件/文件夹路径列表
     /// - `target_path`: 目标目录路径
     ///
     /// # 返回
     /// - `Ok(())`: 操作成功
     /// - `Err(String)`: 错误信息
-    pub fn cut_files(paths: &[String], target_path: &str) -> Result<(), String> {
+    pub async fn cut_files(
+        db: &GlobalDatabase,
+        paths: &[String],
+        target_path: &str,
+    ) -> Result<(), String> {
         let target_dir = Path::new(target_path);
 
         // 检查目标路径是否存在且为目录
@@ -348,6 +353,12 @@ impl FileSystemService {
         if !target_dir.is_dir() {
             return Err(format!("目标路径不是目录: {}", target_path));
         }
+
+        // 获取数据库连接
+        let connection = db
+            .get_connection()
+            .await
+            .map_err(|e| format!("获取数据库连接失败: {}", e))?;
 
         // 移动每个文件/文件夹
         for path in paths {
@@ -364,6 +375,7 @@ impl FileSystemService {
 
             // 构建目标路径
             let dest_path = target_dir.join(file_name);
+            let dest_path_str = dest_path.to_string_lossy().to_string();
 
             // 如果目标路径已存在，返回错误
             if dest_path.exists() {
@@ -373,6 +385,16 @@ impl FileSystemService {
             // 移动文件/文件夹
             fs::rename(source_path, &dest_path)
                 .map_err(|e| format!("移动文件失败 {} -> {}: {}", path, dest_path.display(), e))?;
+
+            // 如果源文件在 files 表中有记录，更新 current_path 字段
+            match &connection {
+                DatabaseConnectionRef::Postgres(pool) => {
+                    Self::update_file_path_postgres(pool, path, &dest_path_str).await?;
+                }
+                DatabaseConnectionRef::Sqlite(pool) => {
+                    Self::update_file_path_sqlite(pool, path, &dest_path_str).await?;
+                }
+            }
         }
 
         Ok(())
@@ -381,13 +403,18 @@ impl FileSystemService {
     /// 复制文件
     ///
     /// # 参数
+    /// - `db`: 全局数据库实例
     /// - `paths`: 要复制的文件/文件夹路径列表
     /// - `target_path`: 目标目录路径
     ///
     /// # 返回
     /// - `Ok(())`: 操作成功
     /// - `Err(String)`: 错误信息
-    pub fn copy_files(paths: &[String], target_path: &str) -> Result<(), String> {
+    pub async fn copy_files(
+        db: &GlobalDatabase,
+        paths: &[String],
+        target_path: &str,
+    ) -> Result<(), String> {
         let target_dir = Path::new(target_path);
 
         // 检查目标路径是否存在且为目录
@@ -398,6 +425,12 @@ impl FileSystemService {
         if !target_dir.is_dir() {
             return Err(format!("目标路径不是目录: {}", target_path));
         }
+
+        // 获取数据库连接
+        let connection = db
+            .get_connection()
+            .await
+            .map_err(|e| format!("获取数据库连接失败: {}", e))?;
 
         // 复制每个文件/文件夹
         for path in paths {
@@ -414,6 +447,7 @@ impl FileSystemService {
 
             // 构建目标路径
             let dest_path = target_dir.join(file_name);
+            let dest_path_str = dest_path.to_string_lossy().to_string();
 
             // 如果目标路径已存在，返回错误
             if dest_path.exists() {
@@ -428,6 +462,16 @@ impl FileSystemService {
                 // 复制文件
                 fs::copy(source_path, &dest_path)
                     .map_err(|e| format!("复制文件失败 {} -> {}: {}", path, dest_path.display(), e))?;
+            }
+
+            // 检查源文件是否有标签，如果有则复制标签到新文件
+            match &connection {
+                DatabaseConnectionRef::Postgres(pool) => {
+                    Self::copy_file_tags_postgres(pool, path, &dest_path_str).await?;
+                }
+                DatabaseConnectionRef::Sqlite(pool) => {
+                    Self::copy_file_tags_sqlite(pool, path, &dest_path_str).await?;
+                }
             }
         }
 
@@ -599,7 +643,6 @@ impl FileSystemService {
         old_path: &str,
         new_path: &str,
     ) -> Result<(), String> {
-        println!("update_file_path_postgres: old_path = {}, new_path = {}", old_path, new_path);
         sqlx::query(
             r#"
             UPDATE files
@@ -677,6 +720,250 @@ impl FileSystemService {
             .execute(pool)
             .await
             .map_err(|e| format!("软删除文件记录失败: {}", e))?;
+        }
+
+        Ok(())
+    }
+
+    /// PostgreSQL 实现：复制文件标签
+    ///
+    /// 如果源文件有标签，则创建新文件记录并复制所有标签关联
+    /// 如果源文件没有标签，则不创建文件记录
+    async fn copy_file_tags_postgres(
+        pool: &Pool<Postgres>,
+        source_path: &str,
+        dest_path: &str,
+    ) -> Result<(), String> {
+        use std::fs;
+        use std::path::Path;
+
+        // 检查源文件是否在数据库中有记录
+        let source_file_row = sqlx::query(
+            r#"
+            SELECT id, file_type, file_size
+            FROM files
+            WHERE current_path = $1 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(source_path)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("查询源文件记录失败: {}", e))?;
+
+        // 如果源文件没有记录，不需要创建新文件记录
+        let source_file_id = match source_file_row {
+            Some(row) => row.get::<i32, _>("id"),
+            None => return Ok(()),
+        };
+
+        // 查询源文件的所有标签
+        let tag_rows = sqlx::query(
+            r#"
+            SELECT tag_id
+            FROM file_tags
+            WHERE file_id = $1
+            "#,
+        )
+        .bind(source_file_id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("查询源文件标签失败: {}", e))?;
+
+        // 如果源文件没有标签，不需要创建新文件记录
+        if tag_rows.is_empty() {
+            return Ok(());
+        }
+
+        // 获取目标文件的元数据
+        let dest_path_obj = Path::new(dest_path);
+        if !dest_path_obj.exists() {
+            return Ok(()); // 文件不存在，不需要处理
+        }
+
+        let is_dir = dest_path_obj.is_dir();
+        let file_type = if is_dir { "folder" } else { "file" };
+        let file_size = if is_dir {
+            0
+        } else {
+            fs::metadata(dest_path_obj)
+                .map_err(|e| format!("获取文件元数据失败 {}: {}", dest_path, e))?
+                .len() as i64
+        };
+
+        // 创建新文件记录
+        let dest_file_row = sqlx::query(
+            r#"
+            INSERT INTO files (current_path, file_type, file_size)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (current_path) DO UPDATE
+            SET file_type = EXCLUDED.file_type,
+                file_size = EXCLUDED.file_size,
+                updated_at = CURRENT_TIMESTAMP,
+                deleted_at = NULL
+            RETURNING id
+            "#,
+        )
+        .bind(dest_path)
+        .bind(file_type)
+        .bind(file_size)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("创建目标文件记录失败: {}", e))?;
+
+        let dest_file_id: i32 = dest_file_row.get("id");
+
+        // 复制所有标签关联
+        for tag_row in tag_rows {
+            let tag_id: i32 = tag_row.get("tag_id");
+            sqlx::query(
+                r#"
+                INSERT INTO file_tags (file_id, tag_id)
+                VALUES ($1, $2)
+                ON CONFLICT (file_id, tag_id) DO NOTHING
+                "#,
+            )
+            .bind(dest_file_id)
+            .bind(tag_id)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("复制标签关联失败: {}", e))?;
+        }
+
+        Ok(())
+    }
+
+    /// SQLite 实现：复制文件标签
+    ///
+    /// 如果源文件有标签，则创建新文件记录并复制所有标签关联
+    /// 如果源文件没有标签，则不创建文件记录
+    async fn copy_file_tags_sqlite(
+        pool: &Pool<Sqlite>,
+        source_path: &str,
+        dest_path: &str,
+    ) -> Result<(), String> {
+        use std::fs;
+        use std::path::Path;
+
+        // 检查源文件是否在数据库中有记录
+        let source_file_row = sqlx::query(
+            r#"
+            SELECT id, file_type, file_size
+            FROM files
+            WHERE current_path = ?1 AND deleted_at IS NULL
+            "#,
+        )
+        .bind(source_path)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("查询源文件记录失败: {}", e))?;
+
+        // 如果源文件没有记录，不需要创建新文件记录
+        let source_file_id = match source_file_row {
+            Some(row) => row.get::<i32, _>("id"),
+            None => return Ok(()),
+        };
+
+        // 查询源文件的所有标签
+        let tag_rows = sqlx::query(
+            r#"
+            SELECT tag_id
+            FROM file_tags
+            WHERE file_id = ?1
+            "#,
+        )
+        .bind(source_file_id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("查询源文件标签失败: {}", e))?;
+
+        // 如果源文件没有标签，不需要创建新文件记录
+        if tag_rows.is_empty() {
+            return Ok(());
+        }
+
+        // 获取目标文件的元数据
+        let dest_path_obj = Path::new(dest_path);
+        if !dest_path_obj.exists() {
+            return Ok(()); // 文件不存在，不需要处理
+        }
+
+        let is_dir = dest_path_obj.is_dir();
+        let file_type = if is_dir { "folder" } else { "file" };
+        let file_size = if is_dir {
+            0
+        } else {
+            fs::metadata(dest_path_obj)
+                .map_err(|e| format!("获取文件元数据失败 {}: {}", dest_path, e))?
+                .len() as i64
+        };
+
+        // 创建新文件记录
+        // SQLite 不支持 ON CONFLICT DO UPDATE，需要先尝试插入，如果失败则更新
+        let insert_result = sqlx::query(
+            r#"
+            INSERT INTO files (current_path, file_type, file_size)
+            VALUES (?1, ?2, ?3)
+            "#,
+        )
+        .bind(dest_path)
+        .bind(file_type)
+        .bind(file_size)
+        .execute(pool)
+        .await;
+
+        let dest_file_id = match insert_result {
+            Ok(_) => {
+                // 插入成功，获取新ID
+                let row = sqlx::query("SELECT id FROM files WHERE current_path = ?1")
+                    .bind(dest_path)
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|e| format!("获取文件ID失败: {}", e))?;
+                row.get::<i32, _>("id")
+            }
+            Err(_) => {
+                // 插入失败（可能是唯一约束冲突），更新现有记录
+                sqlx::query(
+                    r#"
+                    UPDATE files
+                    SET file_type = ?2,
+                        file_size = ?3,
+                        updated_at = CURRENT_TIMESTAMP,
+                        deleted_at = NULL
+                    WHERE current_path = ?1
+                    "#,
+                )
+                .bind(dest_path)
+                .bind(file_type)
+                .bind(file_size)
+                .execute(pool)
+                .await
+                .map_err(|e| format!("更新文件记录失败: {}", e))?;
+
+                // 获取更新后的ID
+                let row = sqlx::query("SELECT id FROM files WHERE current_path = ?1")
+                    .bind(dest_path)
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|e| format!("获取文件ID失败: {}", e))?;
+                row.get::<i32, _>("id")
+            }
+        };
+
+        // 复制所有标签关联
+        for tag_row in tag_rows {
+            let tag_id: i32 = tag_row.get("tag_id");
+            sqlx::query(
+                r#"
+                INSERT OR IGNORE INTO file_tags (file_id, tag_id)
+                VALUES (?1, ?2)
+                "#,
+            )
+            .bind(dest_file_id)
+            .bind(tag_id)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("复制标签关联失败: {}", e))?;
         }
 
         Ok(())

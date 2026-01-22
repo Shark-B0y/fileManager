@@ -113,8 +113,10 @@ pub async fn check_path_exists(path: String) -> Result<bool, String> {
 /// 剪切文件（移动文件）
 ///
 /// 将指定的文件/文件夹移动到目标目录
+/// 如果被剪切的文件原本在 files 表中有数据，则会更新 current_path 字段
 ///
 /// # 参数
+/// - `db`: 全局数据库实例
 /// - `paths`: 要剪切的文件/文件夹路径列表
 /// - `target_path`: 目标目录路径
 ///
@@ -122,15 +124,22 @@ pub async fn check_path_exists(path: String) -> Result<bool, String> {
 /// - `Ok(())`: 操作成功
 /// - `Err(String)`: 错误信息
 #[tauri::command]
-pub async fn cut_files(paths: Vec<String>, target_path: String) -> Result<(), String> {
-    FileSystemService::cut_files(&paths, &target_path)
+pub async fn cut_files(
+    db: State<'_, GlobalDatabase>,
+    paths: Vec<String>,
+    target_path: String,
+) -> Result<(), String> {
+    FileSystemService::cut_files(&*db, &paths, &target_path).await
 }
 
 /// 复制文件
 ///
 /// 将指定的文件/文件夹复制到目标目录
+/// 如果被复制的文件原本有 tag，则新生成的文件信息需要复制一份原有的 tag
+/// 如果原来的文件没有 tag，则不需要新生成文件信息，也不需要更新 tag
 ///
 /// # 参数
+/// - `db`: 全局数据库实例
 /// - `paths`: 要复制的文件/文件夹路径列表
 /// - `target_path`: 目标目录路径
 ///
@@ -138,8 +147,12 @@ pub async fn cut_files(paths: Vec<String>, target_path: String) -> Result<(), St
 /// - `Ok(())`: 操作成功
 /// - `Err(String)`: 错误信息
 #[tauri::command]
-pub async fn copy_files(paths: Vec<String>, target_path: String) -> Result<(), String> {
-    FileSystemService::copy_files(&paths, &target_path)
+pub async fn copy_files(
+    db: State<'_, GlobalDatabase>,
+    paths: Vec<String>,
+    target_path: String,
+) -> Result<(), String> {
+    FileSystemService::copy_files(&*db, &paths, &target_path).await
 }
 
 /// 获取标签列表

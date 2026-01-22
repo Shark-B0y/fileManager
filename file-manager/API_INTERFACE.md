@@ -494,7 +494,7 @@ pub fn check_path_exists(path: &str) -> Result<bool, String> {
 
 ### 5. cut_files - 剪切文件
 
-**功能描述**：将指定的文件/文件夹移动到目标目录（剪切操作）。
+**功能描述**：将指定的文件/文件夹移动到目标目录（剪切操作）。如果被剪切的文件原本在 files 表中有数据，则会自动更新 current_path 字段，确保标签关联不会丢失。
 
 **接口名称**：`cut_files`
 
@@ -513,7 +513,11 @@ await invoke('cut_files', {
 **Rust 后端**：
 ```rust
 #[tauri::command]
-pub async fn cut_files(paths: Vec<String>, target_path: String) -> Result<(), String>
+pub async fn cut_files(
+    db: State<'_, GlobalDatabase>,
+    paths: Vec<String>,
+    target_path: String,
+) -> Result<(), String>
 ```
 
 **参数说明**：
@@ -574,8 +578,12 @@ await cutFiles(
 **后端实现** (`src-tauri/src/commands.rs`)：
 ```rust
 #[tauri::command]
-pub async fn cut_files(paths: Vec<String>, target_path: String) -> Result<(), String> {
-    FileSystemService::cut_files(&paths, &target_path)
+pub async fn cut_files(
+    db: State<'_, GlobalDatabase>,
+    paths: Vec<String>,
+    target_path: String,
+) -> Result<(), String> {
+    FileSystemService::cut_files(&*db, &paths, &target_path).await
 }
 ```
 
@@ -586,12 +594,13 @@ pub async fn cut_files(paths: Vec<String>, target_path: String) -> Result<(), St
 3. **递归移动**：如果移动的是文件夹，会递归移动文件夹内的所有内容
 4. **目标冲突**：如果目标位置已存在同名文件/文件夹，操作会失败
 5. **权限要求**：需要对源路径和目标路径都有写入权限
+6. **数据库更新**：如果被剪切的文件原本在 files 表中有数据，会自动更新 current_path 字段，确保标签关联不会丢失
 
 ---
 
 ### 6. copy_files - 复制文件
 
-**功能描述**：将指定的文件/文件夹复制到目标目录（复制操作）。
+**功能描述**：将指定的文件/文件夹复制到目标目录（复制操作）。如果被复制的文件原本有 tag，则新生成的文件信息需要复制一份原有的 tag；如果原来的文件没有 tag，则不需要新生成文件信息，也不需要更新 tag。
 
 **接口名称**：`copy_files`
 
@@ -610,7 +619,11 @@ await invoke('copy_files', {
 **Rust 后端**：
 ```rust
 #[tauri::command]
-pub async fn copy_files(paths: Vec<String>, target_path: String) -> Result<(), String>
+pub async fn copy_files(
+    db: State<'_, GlobalDatabase>,
+    paths: Vec<String>,
+    target_path: String,
+) -> Result<(), String>
 ```
 
 **参数说明**：
@@ -671,8 +684,12 @@ await copyFiles(
 **后端实现** (`src-tauri/src/commands.rs`)：
 ```rust
 #[tauri::command]
-pub async fn copy_files(paths: Vec<String>, target_path: String) -> Result<(), String> {
-    FileSystemService::copy_files(&paths, &target_path)
+pub async fn copy_files(
+    db: State<'_, GlobalDatabase>,
+    paths: Vec<String>,
+    target_path: String,
+) -> Result<(), String> {
+    FileSystemService::copy_files(&*db, &paths, &target_path).await
 }
 ```
 
@@ -684,6 +701,10 @@ pub async fn copy_files(paths: Vec<String>, target_path: String) -> Result<(), S
 4. **目标冲突**：如果目标位置已存在同名文件/文件夹，操作会失败
 5. **权限要求**：需要对源路径有读取权限，对目标路径有写入权限
 6. **隐藏文件**：复制文件夹时，会跳过隐藏文件（以 `.` 开头的文件）
+7. **标签复制**：
+   - 如果被复制的文件原本有 tag，则新生成的文件信息需要复制一份原有的 tag
+   - 如果原来的文件没有 tag，则不需要新生成文件信息，也不需要更新 tag
+   - 只有源文件在数据库中有记录且有关联标签时，才会为新文件创建记录并复制标签
 
 ---
 
