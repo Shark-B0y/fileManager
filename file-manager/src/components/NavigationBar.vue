@@ -133,12 +133,6 @@
       </transition>
     </div>
 
-    <!-- 错误提示消息 -->
-    <transition name="error-fade">
-      <div v-if="errorMessage" class="error-message">
-        {{ errorMessage }}
-      </div>
-    </transition>
   </div>
 </template>
 
@@ -194,10 +188,6 @@ const isSearchDropdownOpen = ref(false);
 const matchedTags = ref<Tag[]>([]);
 const selectedTagId = ref<number | null>(null);
 let searchTagsTimer: number | null = null;
-
-// 错误提示消息
-const errorMessage = ref<string>('');
-let errorTimer: number | null = null;
 
 // 显示路径（如果是驱动盘列表，显示中文；否则显示实际路径）
 const displayPath = computed(() => {
@@ -355,7 +345,11 @@ async function handlePathInput() {
       pathInputRef.value?.blur();
     } else {
       // 路径不存在，显示错误提示
-      showErrorMessage(`路径不存在: ${inputPath}`);
+      window.dispatchEvent(
+        new CustomEvent('show-global-error', {
+          detail: { message: `路径不存在: ${inputPath}` },
+        }),
+      );
       // 清空输入框，失去焦点后会自动恢复为当前路径（占位符）
       pathInputValue.value = '';
       pathInputRef.value?.blur();
@@ -363,7 +357,11 @@ async function handlePathInput() {
   } catch (error) {
     // 发生错误，显示错误提示
     const message = error instanceof Error ? error.message : String(error);
-    showErrorMessage(`无法访问路径: ${message}`);
+    window.dispatchEvent(
+      new CustomEvent('show-global-error', {
+        detail: { message: `无法访问路径: ${message}` },
+      }),
+    );
     // 清空输入框
     pathInputValue.value = '';
     pathInputRef.value?.blur();
@@ -372,31 +370,6 @@ async function handlePathInput() {
 
 // 标记是否正在执行导航操作（返回/前进/向上），避免重复记录历史
 let isNavigating = false;
-
-// 显示错误消息（2秒后自动淡出）
-function showErrorMessage(message: string) {
-  // 清除之前的定时器
-  if (errorTimer !== null) {
-    clearTimeout(errorTimer);
-  }
-
-  // 显示错误消息
-  errorMessage.value = message;
-
-  // 2秒后开始淡出（淡出动画持续0.3秒）
-  errorTimer = window.setTimeout(() => {
-    errorMessage.value = '';
-    errorTimer = null;
-  }, 2000);
-}
-
-// 监听全局错误事件（供其他组件触发）
-window.addEventListener('show-global-error', (event: Event) => {
-  const customEvent = event as CustomEvent<{ message: string }>;
-  if (customEvent.detail?.message) {
-    showErrorMessage(customEvent.detail.message);
-  }
-});
 
 // 处理搜索输入
 async function handleSearchInput() {
@@ -611,10 +584,6 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown);
   document.removeEventListener('click', handleClickOutside);
-  // 清理错误提示定时器
-  if (errorTimer !== null) {
-    clearTimeout(errorTimer);
-  }
 });
 </script>
 
@@ -873,43 +842,6 @@ onUnmounted(() => {
   transform: translateY(-8px);
 }
 
-/* 错误提示消息样式 */
-.error-message {
-  position: absolute;
-  top: 50px;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: #f44336;
-  color: #ffffff;
-  padding: 10px 20px;
-  border-radius: 10px;
-  font-size: 14px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  white-space: nowrap;
-  max-width: 80%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 淡入淡出动画 */
-.error-fade-enter-active {
-  transition: opacity 0.3s ease-in;
-}
-
-.error-fade-leave-active {
-  transition: opacity 0.3s ease-out;
-}
-
-.error-fade-enter-from,
-.error-fade-leave-to {
-  opacity: 0;
-}
-
-.error-fade-enter-to,
-.error-fade-leave-from {
-  opacity: 1;
-}
 
 /* 标签建议列表样式 */
 .tag-suggestions {

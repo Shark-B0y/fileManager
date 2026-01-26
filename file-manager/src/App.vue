@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import NavigationBar from './components/NavigationBar.vue';
 import Toolbar from './components/Toolbar.vue';
 import MainContent from './components/MainContent.vue';
+import GlobalMessage from './components/GlobalMessage.vue';
 import type { FileItem } from './types/file';
 
 const mainContentRef = ref<InstanceType<typeof MainContent> | null>(null);
@@ -49,6 +50,7 @@ function handleDeleteComplete() {
       @delete-complete="handleDeleteComplete"
     />
     <MainContent ref="mainContentRef" />
+    <GlobalMessage />
   </div>
 </template>
 

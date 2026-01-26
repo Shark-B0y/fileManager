@@ -568,14 +568,18 @@ async function addTagToSelectedFiles(tag: Tag) {
       tagId: tag.id,
     });
 
-    // 显示成功提示（使用 alert，后续可以改为更优雅的提示方式）
+    // 显示成功提示
     const itemCount = props.selectedItems.length;
     const successMessage = itemCount === 1
       ? `已为文件 "${props.selectedItems[0].name}" 添加标签 "${tag.name}"`
       : `已为 ${itemCount} 个文件/文件夹添加标签 "${tag.name}"`;
 
-    // 使用 alert 显示成功消息（后续可以改为更优雅的提示方式）
-    alert(successMessage);
+    // 使用全局消息组件显示成功消息
+    window.dispatchEvent(
+      new CustomEvent('show-global-normal-message', {
+        detail: { message: successMessage },
+      }),
+    );
 
     // 重新加载标签列表以更新使用次数
     await loadTagList();

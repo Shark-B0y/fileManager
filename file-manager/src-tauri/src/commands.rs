@@ -330,10 +330,5 @@ pub async fn search_files_by_tag(
     page: Option<usize>,
     page_size: Option<usize>,
 ) -> Result<SearchResult, String> {
-    let res = TagService::search_files_by_tag(&*db, tag_id, page, page_size).await;
-    if let Err(e) = res {
-        println!("search_files_by_tag error: {}", e);
-        return Err(e);
-    }
-    res
+    TagService::search_files_by_tag(&*db, tag_id, page, page_size).await
 }
