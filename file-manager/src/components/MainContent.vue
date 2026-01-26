@@ -10,7 +10,7 @@
     </div>
 
     <FileList
-      v-else-if="(directoryInfo || tagSearchItems.length > 0) && viewMode === 'list'"
+      v-else-if="shouldShowFileList && viewMode === 'list'"
       ref="fileListRef"
       :items="displayItems"
       :selected-item-ids="selectedItemIds"
@@ -23,7 +23,7 @@
     />
 
     <IconView
-      v-else-if="(directoryInfo || tagSearchItems.length > 0) && viewMode === 'icon'"
+      v-else-if="shouldShowFileList && viewMode === 'icon'"
       ref="iconViewRef"
       :items="displayItems"
       :selected-item-ids="selectedItemIds"
@@ -36,7 +36,7 @@
     />
 
     <div v-else class="empty">
-      暂无内容
+      <span class="empty-text">暂无记录</span>
     </div>
   </div>
 </template>
@@ -100,10 +100,23 @@ const PAGE_SIZE = 50;
 
 // 计算显示的文件列表（优先显示标签搜索结果）
 const displayItems = computed(() => {
-  if (tagSearchItems.value.length > 0) {
+  if (tagSearchTagId.value !== null) {
+    // 如果正在进行标签搜索，只显示搜索结果（即使为空）
     return tagSearchItems.value;
   }
   return directoryInfo.value?.items || [];
+});
+
+// 计算是否应该显示文件列表
+// 如果正在进行标签搜索，即使结果为空也要显示列表组件（用于显示空状态）
+// 如果是目录浏览，需要有目录信息且有文件才显示
+const shouldShowFileList = computed(() => {
+  if (tagSearchTagId.value !== null) {
+    // 正在进行标签搜索，总是显示列表组件（即使为空）
+    return true;
+  }
+  // 目录浏览模式，需要有目录信息
+  return directoryInfo.value !== null;
 });
 
 // 监听目录变化，清除选中状态和标签搜索结果
@@ -308,15 +321,31 @@ async function handleScrollToBottom() {
   }
 }
 
+// 清除标签搜索状态
+function clearTagSearch() {
+  tagSearchTagId.value = null;
+  tagSearchItems.value = [];
+  tagSearchPage.value = 1;
+  tagSearchHasMore.value = false;
+  tagSearchLoading.value = false;
+}
+
+// 处理清除标签搜索事件
+function handleClearTagSearch() {
+  clearTagSearch();
+}
+
 // 监听搜索事件
 onMounted(() => {
   window.addEventListener('file-search', handleSearchEvent as unknown as EventListener);
   window.addEventListener('tag-search', handleTagSearchEvent as unknown as EventListener);
+  window.addEventListener('clear-tag-search', handleClearTagSearch as unknown as EventListener);
 });
 
 onUnmounted(() => {
   window.removeEventListener('file-search', handleSearchEvent as unknown as EventListener);
   window.removeEventListener('tag-search', handleTagSearchEvent as unknown as EventListener);
+  window.removeEventListener('clear-tag-search', handleClearTagSearch as unknown as EventListener);
 });
 
 // 计算选中的文件项
@@ -363,6 +392,12 @@ initialize();
   justify-content: center;
   padding: 40px;
   color: #666;
+}
+
+.empty-text {
+  color: #999;
+  font-size: 14px;
+  user-select: none;
 }
 
 .error {

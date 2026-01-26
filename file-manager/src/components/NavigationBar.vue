@@ -229,6 +229,8 @@ async function handleGoBack() {
   isNavigating = true;
   const path = goBack();
   if (path) {
+    // 通知 MainContent 清除标签搜索状态
+    window.dispatchEvent(new CustomEvent('clear-tag-search'));
     if (path === '驱动盘' || path === 'drives:') {
       await loadDrives();
     } else {
@@ -244,6 +246,8 @@ async function handleGoForward() {
   isNavigating = true;
   const path = goForward();
   if (path) {
+    // 通知 MainContent 清除标签搜索状态
+    window.dispatchEvent(new CustomEvent('clear-tag-search'));
     if (path === '驱动盘' || path === 'drives:') {
       await loadDrives();
     } else {
@@ -257,6 +261,8 @@ async function handleGoUp() {
   if (!canGoUp.value) return;
 
   isNavigating = true;
+  // 通知 MainContent 清除标签搜索状态
+  window.dispatchEvent(new CustomEvent('clear-tag-search'));
   await fsGoUp();
 
   // 向上导航后，路径已经改变，手动更新导航历史
@@ -267,6 +273,8 @@ async function handleGoUp() {
 
 // 处理刷新
 async function handleRefresh() {
+  // 通知 MainContent 清除标签搜索状态
+  window.dispatchEvent(new CustomEvent('clear-tag-search'));
   await refresh();
 }
 

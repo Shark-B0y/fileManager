@@ -1177,12 +1177,13 @@ impl TagService {
                 f.current_path,
                 f.file_type,
                 f.file_size,
-                f.created_at
+                f.created_at,
+                CASE WHEN f.file_type = 'folder' THEN 0 ELSE 1 END AS sort_priority
             FROM files f
             INNER JOIN file_tags ft ON f.id = ft.file_id
             WHERE ft.tag_id = $1 AND f.deleted_at IS NULL
             ORDER BY
-                CASE WHEN f.file_type = 'folder' THEN 0 ELSE 1 END,
+                sort_priority,
                 f.created_at DESC
             LIMIT $2 OFFSET $3
         "#;
@@ -1298,7 +1299,7 @@ impl TagService {
                 f.current_path,
                 f.file_type,
                 f.file_size,
-                f.created_at
+                f.created_at,
             FROM files f
             INNER JOIN file_tags ft ON f.id = ft.file_id
             WHERE ft.tag_id = ?1 AND f.deleted_at IS NULL

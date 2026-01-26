@@ -48,6 +48,11 @@
       </div>
     </div>
 
+    <!-- 空状态 -->
+    <div v-if="items.length === 0" class="empty-state">
+      <span class="empty-text">暂无记录</span>
+    </div>
+
     <!-- 选择框 -->
     <div
       v-if="isSelecting"
@@ -691,5 +696,24 @@ defineExpose({
   background-color: rgba(33, 150, 243, 0.1);
   pointer-events: none;
   z-index: 10;
+}
+
+/* 空状态样式 */
+.empty-state {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.empty-text {
+  color: #999;
+  font-size: 14px;
+  user-select: none;
 }
 </style>
